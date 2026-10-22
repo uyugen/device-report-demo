@@ -1,7 +1,9 @@
 """Reproducible functional test signals; not a physical bearing fault simulator."""
 from datetime import datetime, timedelta
 import numpy as np
-from scipy.signal import butter, sosfiltfilt, find_peaks
+from scipy.signal import find_peaks
+import math
+from .case_data import FEATURES
 
 SCENARIOS = {
     'rising': '振动逐步上升',
@@ -63,9 +65,14 @@ def simulate(scenario='rising', seed=20261022):
     }
 
 def analyse(snapshot):
+    supplied={k:snapshot.get('current_features',{}).get(k) for k in FEATURES}
+    checks=snapshot.get('quality',{'warnings':[],'limitations':[]})
+    base={'uploaded_features':supplied,'recomputed_features':{},'comparisons':[],
+          'missing':list(checks.get('limitations',[])), 'warnings':list(checks.get('warnings',[])),
+          'rpm_available':bool(snapshot['device']['rpm']), 'feature_source':'上传特征表（未经波形复核）'}
     if snapshot['waveform'] is None:
-        return {'features':{},'peaks':[],'frequency':[],'amplitude':[],
-                'missing':['当前原始波形'],'rpm_available':bool(snapshot['device']['rpm'])}
+        return {**base,'features':supplied if 'current_features' in snapshot else {},
+                'peaks':[],'frequency':[],'amplitude':[]}
     x=np.array(snapshot['waveform']); fs=snapshot['sampling_rate']
     win=np.hanning(len(x)); freq=np.fft.rfftfreq(len(x),1/fs)
     amp=2*np.abs(np.fft.rfft((x-x.mean())*win))/win.sum()
@@ -73,7 +80,15 @@ def analyse(snapshot):
     if len(x)%2==0:amp[-1]/=2
     ids,_=find_peaks(amp)
     ids=sorted([int(i) for i in ids if freq[i]>=10],key=lambda i:amp[i],reverse=True)[:5]
-    return {'features':features(x,fs),'peaks':[{'hz':float(freq[i]),'amplitude':float(amp[i])} for i in ids],
+    computed=features(x,fs)
+    for key in FEATURES:
+        a,b=supplied[key],computed[key]
+        ok=a is not None and b is not None and math.isclose(a,b,rel_tol=.01,abs_tol=.001)
+        status='未提供' if a is None else ('一致' if ok else '不一致，请核查')
+        base['comparisons'].append({'feature':key,'uploaded':a,'recomputed':b,'status':status})
+        if a is not None and not ok:
+            base['warnings'].append(f'{key}上传值{a:g}与波形复算值{b:g}不一致，请核查；当前分析采用复算值')
+    return {**base,'features':computed,'recomputed_features':computed,'feature_source':'原始波形复算',
+            'peaks':[{'hz':float(freq[i]),'amplitude':float(amp[i])} for i in ids],
             'frequency':freq.tolist(),'amplitude':amp.tolist(),
-            'missing':['低频冲击值算法口径未定义']+([] if snapshot['device']['rpm'] else ['可信转速']),
-            'rpm_available':bool(snapshot['device']['rpm'])}
+            'missing':base['missing']+['低频冲击值算法口径未定义']}

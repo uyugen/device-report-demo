@@ -16,22 +16,28 @@ def validate_rules(rules):
     return rules
 
 def evaluate(snapshot,analysis,rules):
-    h=snapshot['history']; first=h[0]['velocity_rms'];last=h[-1]['velocity_rms']
-    change=(last-first)/first*100 if first else None
+    h=[r for r in snapshot['history'] if r.get('velocity_rms') is not None]
+    first=h[0]['velocity_rms'] if h else None
+    last=h[-1]['velocity_rms'] if h else None
+    change=(last-first)/first*100 if first and len(h)>=2 else None
     results=[]
     for rule in rules:
         if rule['kind']=='demo_trend':
             result='未知' if change is None else ('满足' if change>=rule['threshold_percent'] else '不满足')
-            results.append({'id':rule['id'],'name':rule['name'],'status':result if rule['enabled'] else '禁用',
-                'source':rule['source'],'detail':f'速度有效值变化 {change:.1f}% ≥ 演示阈值 {rule["threshold_percent"]}%' if change is not None else '起始值为零，不能计算相对变化'})
+            results.append({'id':rule['id'],'name':rule['name'],'kind':rule['kind'],'status':result if rule['enabled'] else '禁用',
+                'source':rule['source'],'detail':f'速度有效值变化 {change:.1f}%，演示阈值 {rule["threshold_percent"]}%，比较结果：{result}' if change is not None else '有效历史不足或起始值为零，不能计算相对变化'})
         else:
             f=analysis['features']; k=f.get('kurtosis'); c=f.get('crest_factor')
             conditions=[{'name':'3.5≤峭度<4.5','value':k,'status':'未知' if k is None else ('满足' if 3.5<=k<4.5 else '不满足')},
                         {'name':'8≤低频冲击值<16','value':None,'status':'未知'},
                         {'name':'峰值/RMS≥4','value':c,'status':'未知' if c is None else ('满足' if c>=4 else '不满足')}]
-            results.append({'id':rule['id'],'name':rule['name'],'status':'待审核，不执行','source':rule['source'],
+            results.append({'id':rule['id'],'name':rule['name'],'kind':rule['kind'],'status':'待审核，不执行','source':rule['source'],
                             'detail':rule['pending'],'conditions':conditions})
     matched=any(r['status']=='满足' for r in results)
     return {'rules':results,'change_percent':change,'first':first,'last':last,
-            'state':'达到演示趋势阈值，故障类型待核实' if matched else '未达到演示趋势阈值，不能据此证明无故障',
+            'trend_count':len(h),'trend_start':h[0]['measured_time'] if h else None,
+            'trend_end':h[-1]['measured_time'] if h else None,
+            'data_warnings':analysis.get('warnings',[]),
+            'state':('达到演示趋势阈值，故障类型待核实' if matched else
+                     ('趋势资料不足，不能判断是否达到演示阈值' if change is None else '未达到演示趋势阈值，不能据此证明无故障')),
             'fault':'未定位','severity':'未分级','requires_review':True}

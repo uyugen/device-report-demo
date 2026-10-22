@@ -3,7 +3,8 @@ from datetime import datetime,timezone
 from pathlib import Path
 from typing import TypedDict
 from langgraph.graph import StateGraph,START,END
-from .signal_data import simulate,analyse
+from .signal_data import analyse
+from .case_data import parse_zip,check_snapshot
 from .rules import evaluate
 from .knowledge import retrieve
 from .charts import draw
@@ -19,29 +20,43 @@ def load(run_id):
     with sqlite3.connect(DB) as c:row=c.execute('SELECT status,payload FROM runs WHERE id=?',(run_id,)).fetchone()
     return {'status':row[0],**json.loads(row[1])} if row else None
 class State(TypedDict,total=False):
-    run_id:str;scenario:str;use_llm:bool;events:list;snapshot:dict;analysis:dict;decision:dict
+    run_id:str;case_id:str;case_path:str;use_llm:bool;events:list;snapshot:dict;analysis:dict;decision:dict
     knowledge:list;text:dict;writer:dict;summary:str;pdf:dict;output:dict;rules:list
 
 def log(state,label):
     state['events']=[*state.get('events',[]),{'step':label,'time':datetime.now(timezone.utc).isoformat()}]
-    save(state['run_id'],'running',{'id':state['run_id'],'scenario':state['scenario'],'events':state['events']})
+    save(state['run_id'],'running',{'id':state['run_id'],'case_id':state['case_id'],'events':state['events']})
     return state
 def collect(s):
-    log(s,'读取模拟设备与采集数据');s['snapshot']=simulate(s['scenario']);return s
+    s['snapshot']=parse_zip(Path(s['case_path']).read_bytes())
+    log(s,'解析上传案例：台账、历史、当前特征及可选波形');return s
 def quality(s):
-    snap=s['snapshot']
-    if snap['sample_count']/snap['sampling_rate']!=snap['duration_seconds']:raise ValueError('采样参数不一致')
-    log(s,'核对测点、时间、单位与采样参数');return s
+    s['snapshot']['quality']=check_snapshot(s['snapshot'])
+    log(s,'核对必填字段、单位、时间对应关系与采样参数');return s
 def algorithms(s):
-    s['analysis']=analyse(s['snapshot']);log(s,'计算时域特征与幅值频谱');return s
+    s['analysis']=analyse(s['snapshot']);log(s,'保留上传特征，复算可用波形并检查差异');return s
 def rules(s):
     s['rules']=json.loads((ROOT/'config/rules.json').read_text())
     s['decision']=evaluate(s['snapshot'],s['analysis'],s['rules']);log(s,'执行规则并列出未知条件');return s
 def knowledge(s):
     path=WORK/'knowledge.json';records=json.loads(path.read_text()) if path.exists() else []
-    s['knowledge']=retrieve(records);log(s,'检索电动机机理与措施');return s
+    s['knowledge']=retrieve(records);log(s,f'载入全部知识条目（{len(records)}条，不过滤、不截断）');return s
 def write(s):
-    facts={'mode':'simulated','decision':s['decision'],'missing':s['analysis']['missing'],'rpm_available':s['analysis']['rpm_available']}
+    snap=s['snapshot'];a=s['analysis']
+    facts={'mode':'simulated','case_id':snap['case_id'],'device':snap['device'],
+           'availability':{'raw_waveform_provided':snap['waveform'] is not None,
+                           'raw_waveform_array_omitted_from_prompt':True,
+                           'spectrum_computed':bool(a['frequency']),
+                           'note':'原始波形如已提供，由程序复算特征并绘图；仅为控制长度不将数组传给模型，不能据此说缺少波形。'},
+           'measurement':{k:snap[k] for k in ['measured_time','sampling_rate','sample_count','duration_seconds','unit','feature_units']},
+           'uploaded_current_features':a['uploaded_features'],'recomputed_features':a['recomputed_features'],
+           'analysis_features':a['features'],'feature_source':a['feature_source'],'feature_comparisons':a['comparisons'],
+           'history_features':snap['history'],'trend_statistics':{k:s['decision'][k] for k in ['first','last','change_percent','trend_count','trend_start','trend_end']},
+           'spectrum_peaks':a['peaks'],'spectrum_amplitude_unit':'m/s²（单边峰值幅度）',
+           'decision':s['decision'],'missing':a['missing'],'data_warnings':a['warnings'],
+           'rpm_available':a['rpm_available'],'processing':snap['processing']}
+    out=WORK/s['run_id'];out.mkdir(exist_ok=True)
+    (out/'writer_input.json').write_text(json.dumps({'facts':facts,'knowledge':s['knowledge']},ensure_ascii=False,indent=2))
     s['text'],s['writer']=write_report(facts,s['knowledge'],s['use_llm']);log(s,'编写机理说明与检维修建议');return s
 def render(s):
     out=WORK/s['run_id'];out.mkdir(exist_ok=True)
@@ -49,13 +64,12 @@ def render(s):
 def validate(s):
     # Deterministic report values remain outside model-generated text.
     if s['decision']['fault']!='未定位' or s['decision']['severity']!='未分级':raise ValueError('未经审核的结论')
-    if s['analysis']['features']:
+    if s['analysis']['recomputed_features']:
         f=s['analysis']['features']
-        if abs(f['crest_factor']-f['acceleration_peak']/f['acceleration_rms'])>1e-9:raise ValueError('峰值因子不一致')
-        if abs(f['velocity_rms']-s['snapshot']['history'][-1]['velocity_rms'])>1e-9:raise ValueError('趋势与当前波形不一致')
+        if f['acceleration_rms'] and abs(f['crest_factor']-f['acceleration_peak']/f['acceleration_rms'])>1e-9:raise ValueError('峰值因子不一致')
     log(s,'检查数值、引用与结论边界');return s
 def export(s):
-    out=WORK/s['run_id'];s['summary']=export_docx(ROOT/'inputs/reference.docx',s['snapshot'],s['analysis'],s['decision'],s['text'],out)
+    out=WORK/s['run_id'];s['summary']=export_docx(ROOT/'inputs/reference.docx',s['snapshot'],s['analysis'],s['decision'],s['text'],out,s['knowledge'],s['writer'])
     s['pdf']=export_pdf(out);log(s,'生成Word与PDF并归档依据');return s
 
 builder=StateGraph(State)
@@ -65,21 +79,22 @@ for node in nodes:builder.add_node(node.__name__,node);builder.add_edge(last,nod
 builder.add_edge(last,END)
 GRAPH=builder.compile()
 
-def run(run_id,scenario,use_llm):
+def run(run_id,case_id,case_path,use_llm):
     try:
-        s=GRAPH.invoke({'run_id':run_id,'scenario':scenario,'use_llm':use_llm,'events':[]})
+        s=GRAPH.invoke({'run_id':run_id,'case_id':case_id,'case_path':str(case_path),'use_llm':use_llm,'events':[]})
         out=WORK/run_id
         # Persist complete data locally, but keep arrays out of API status and model prompts.
         (out/'snapshot.json').write_text(json.dumps(s['snapshot'],ensure_ascii=False),encoding='utf-8')
         evidence={'decision':s['decision'],'analysis':{k:v for k,v in s['analysis'].items() if k not in ['frequency','amplitude']},
                   'knowledge':s['knowledge'],'writer':s['writer'],'processing':s['snapshot']['processing'],
+                  'quality':s['snapshot']['quality'],'case_id':s['snapshot']['case_id'],
                   'rules':s['rules'],'template_sha256':hashlib.sha256((ROOT/'inputs/reference.docx').read_bytes()).hexdigest()}
         (out/'evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
-        report={'id':run_id,'scenario':scenario,'mode':'simulated','events':s['events'],
+        report={'id':run_id,'case_id':s['snapshot']['case_id'],'case_title':s['snapshot']['title'],'mode':'simulated','events':s['events'],
                 'device':s['snapshot']['device'],'measured_time':s['snapshot']['measured_time'],
                 'summary':s['summary'],'decision':s['decision'],'analysis':evidence['analysis'],
                 'knowledge':s['knowledge'],'writer':s['writer'],'text':s['text'],'pdf':s['pdf'],
-                'processing':s['snapshot']['processing']}
+                'processing':s['snapshot']['processing'],'quality':s['snapshot']['quality']}
         (out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
         save(run_id,'done',report)
     except Exception as e:
