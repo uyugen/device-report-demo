@@ -1,0 +1,22 @@
+[
+  {
+    "id": "DEMO-TREND-001",
+    "name": "同工况趋势变化演示阈值",
+    "enabled": true,
+    "source": "Demo功能测试配置，非行业标准",
+    "kind": "demo_trend",
+    "threshold_percent": 30,
+    "fault": "未定位",
+    "severity": null
+  },
+  {
+    "id": "KB-MOTOR-BEARING",
+    "name": "电机滚动轴承规则草稿",
+    "enabled": false,
+    "source": "知识文档 电动机 / 电机滚动轴承故障",
+    "kind": "bearing_draft",
+    "fault": "滚动轴承故障候选",
+    "severity": null,
+    "pending": "低频冲击值算法和条件连接方式待确认；禁用时只展示，不产生故障候选"
+  }
+]

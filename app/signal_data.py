@@ -1,0 +1,79 @@
+"""Reproducible functional test signals; not a physical bearing fault simulator."""
+from datetime import datetime, timedelta
+import numpy as np
+from scipy.signal import butter, sosfiltfilt, find_peaks
+
+SCENARIOS = {
+    'rising': '振动逐步上升',
+    'stable': '同工况稳定对照',
+    'missing_rpm': '缺少转速',
+    'missing_waveform': '缺少当前波形',
+}
+
+def features(x, fs):
+    a = np.asarray(x, dtype=float)
+    centered = a - a.mean()
+    std = float(np.std(centered))
+    acc_rms = float(np.sqrt(np.mean(a*a)))
+    peak = float(np.max(np.abs(a)))
+    # Explicit frequency-domain integration and 10 Hz high-pass; velocity in mm/s.
+    freq = np.fft.rfftfreq(len(a), 1/fs)
+    af = np.fft.rfft(centered)
+    vf = np.zeros_like(af)
+    usable = freq >= 10
+    vf[usable] = af[usable]/(2j*np.pi*freq[usable])
+    velocity = np.fft.irfft(vf, n=len(a))*1000
+    return {
+        'velocity_rms':float(np.sqrt(np.mean(velocity**2))),
+        'acceleration_rms':acc_rms,
+        'acceleration_peak':peak,
+        'kurtosis':float(np.mean(centered**4)/std**4) if std else None,
+        'skewness':float(np.mean(centered**3)/std**3) if std else None,
+        'crest_factor':peak/acc_rms if acc_rms else None,
+        'low_frequency_impulse':None,
+    }
+
+def simulate(scenario='rising', seed=20261022):
+    if scenario not in SCENARIOS:
+        raise ValueError('未知模拟场景')
+    fs, n, rpm = 6400, 12800, 1500
+    t = np.arange(n)/fs
+    rng = np.random.default_rng(seed)
+    end = datetime(2026,10,22,12,0)
+    history=[]; last=None
+    for i in range(14):
+        target = 2.2 + (1.4*i/13 if scenario!='stable' else 0.04*np.sin(i))
+        x = np.sin(2*np.pi*25*t)+0.12*np.sin(2*np.pi*50*t)+0.025*rng.normal(size=n)
+        x *= target/features(x,fs)['velocity_rms']
+        f=features(x,fs)
+        history.append({'measured_time':(end-timedelta(days=13-i)).isoformat(),**f})
+        last=x
+    return {
+        'mode':'simulated','seed':seed,'scenario':scenario,
+        'device':{'id':'DEMO-MOTOR-001','name':'行走电机','type':'电动机','model':'演示电机',
+                  'location':'演示工厂 / 10号产线 / 16号机器','component':'驱动端',
+                  'point_id':'DEMO-DE-H','point_name':'驱动端水平径向','direction':'水平径向',
+                  'rpm':None if scenario=='missing_rpm' else rpm,'load':'恒定负载（模拟设定）'},
+        'measured_time':end.isoformat(),'sampling_rate':fs,'sample_count':n,
+        'duration_seconds':n/fs,'unit':'m/s²','history':history,
+        'waveform':None if scenario=='missing_waveform' else last.tolist(),
+        'processing':{'velocity':'FFT积分，剔除10 Hz以下成分，输出mm/s',
+                      'kurtosis':'中心四阶矩/方差平方，非超额峭度',
+                      'peak':'绝对峰值','spectrum':'Hann窗，单边峰值幅度，相干增益修正'},
+    }
+
+def analyse(snapshot):
+    if snapshot['waveform'] is None:
+        return {'features':{},'peaks':[],'frequency':[],'amplitude':[],
+                'missing':['当前原始波形'],'rpm_available':bool(snapshot['device']['rpm'])}
+    x=np.array(snapshot['waveform']); fs=snapshot['sampling_rate']
+    win=np.hanning(len(x)); freq=np.fft.rfftfreq(len(x),1/fs)
+    amp=2*np.abs(np.fft.rfft((x-x.mean())*win))/win.sum()
+    amp[0]/=2
+    if len(x)%2==0:amp[-1]/=2
+    ids,_=find_peaks(amp)
+    ids=sorted([int(i) for i in ids if freq[i]>=10],key=lambda i:amp[i],reverse=True)[:5]
+    return {'features':features(x,fs),'peaks':[{'hz':float(freq[i]),'amplitude':float(amp[i])} for i in ids],
+            'frequency':freq.tolist(),'amplitude':amp.tolist(),
+            'missing':['低频冲击值算法口径未定义']+([] if snapshot['device']['rpm'] else ['可信转速']),
+            'rpm_available':bool(snapshot['device']['rpm'])}
