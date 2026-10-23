@@ -33,6 +33,46 @@ def fill_table(tbl,rows):
             if ps:replace_text(ps[0],str(value))
             for p in ps[1:]:replace_text(p,'')
 
+def feature_table(rows, width, template_properties):
+    """Write a complete fixed table geometry for Word as well as LibreOffice."""
+    tbl=etree.Element('{'+W+'}tbl')
+    properties=deepcopy(template_properties)
+    tbl.append(properties)
+    total=properties.find('{'+W+'}tblW')
+    if total is None:total=etree.SubElement(properties,'{'+W+'}tblW')
+    total.set('{'+W+'}type','dxa');total.set('{'+W+'}w',str(width))
+    layout=properties.find('{'+W+'}tblLayout')
+    if layout is None:layout=etree.SubElement(properties,'{'+W+'}tblLayout')
+    layout.set('{'+W+'}type','fixed')
+    # A wide label column, plus two equal columns for uploaded/recomputed values.
+    numeric_width=width*26//100
+    widths=[width-2*numeric_width,numeric_width,numeric_width]
+    grid=etree.SubElement(tbl,'{'+W+'}tblGrid')
+    for column_width in widths:
+        etree.SubElement(grid,'{'+W+'}gridCol').set('{'+W+'}w',str(column_width))
+    for index,values in enumerate(rows):
+        tr=etree.SubElement(tbl,'{'+W+'}tr')
+        trpr=etree.SubElement(tr,'{'+W+'}trPr')
+        etree.SubElement(trpr,'{'+W+'}cantSplit')
+        if index==0:etree.SubElement(trpr,'{'+W+'}tblHeader')
+        for column,(value,column_width) in enumerate(zip(values,widths)):
+            tc=etree.SubElement(tr,'{'+W+'}tc')
+            tcpr=etree.SubElement(tc,'{'+W+'}tcPr')
+            cell_width=etree.SubElement(tcpr,'{'+W+'}tcW')
+            cell_width.set('{'+W+'}type','dxa');cell_width.set('{'+W+'}w',str(column_width))
+            if index==0:etree.SubElement(tcpr,'{'+W+'}shd').set('{'+W+'}fill','F1F5F9')
+            etree.SubElement(tcpr,'{'+W+'}vAlign').set('{'+W+'}val','center')
+            p=etree.SubElement(tc,'{'+W+'}p');pr=etree.SubElement(p,'{'+W+'}pPr')
+            spacing=etree.SubElement(pr,'{'+W+'}spacing')
+            spacing.set('{'+W+'}before','0');spacing.set('{'+W+'}after','50')
+            spacing.set('{'+W+'}line','240');spacing.set('{'+W+'}lineRule','auto')
+            etree.SubElement(pr,'{'+W+'}jc').set('{'+W+'}val','left' if column==0 else 'right')
+            r=etree.SubElement(p,'{'+W+'}r');rp=etree.SubElement(r,'{'+W+'}rPr')
+            if index==0:etree.SubElement(rp,'{'+W+'}b')
+            etree.SubElement(rp,'{'+W+'}sz').set('{'+W+'}val','18')
+            etree.SubElement(r,'{'+W+'}t').text=str(value)
+    return tbl
+
 def export_docx(reference,snapshot,analysis,decision,text,out,knowledge=None,writer=None):
     if not Path(reference).exists():raise FileNotFoundError('服务器缺少 inputs/reference.docx')
     if hashlib.sha256(Path(reference).read_bytes()).hexdigest()!='3dea2931998ac6034e9f1122aae644e7860e53aa075ebd0fc45a2615b758c402':raise ValueError('报告模板版本不匹配，请重新核对槽位')
@@ -73,19 +113,14 @@ def export_docx(reference,snapshot,analysis,decision,text,out,knowledge=None,wri
         anchor=ps[7]
         for warning in analysis.get('warnings',[]):anchor=insert_after(anchor,'核查提示  '+warning)
         # Full current feature table with separate uploaded and recomputed values.
-        tbl=etree.Element('{'+W+'}tbl')
-        tblpr=deepcopy(tables[1].find('{'+W+'}tblPr'));tbl.append(tblpr)
         rows=[['当前特征及单位','上传值','波形复算值']]
         labels={'velocity_rms':'速度有效值 mm/s','acceleration_rms':'加速度有效值 m/s²',
                 'acceleration_peak':'加速度峰值 m/s²','kurtosis':'峭度 无量纲','skewness':'偏度 无量纲','crest_factor':'峰值因子 无量纲'}
         for key,label in labels.items():rows.append([label,fmt(analysis.get('uploaded_features',{}).get(key)),fmt(analysis.get('recomputed_features',{}).get(key))])
-        for values in rows:
-            tr=etree.SubElement(tbl,'{'+W+'}tr')
-            for value in values:
-                tc=etree.SubElement(tr,'{'+W+'}tc');p=etree.SubElement(tc,'{'+W+'}p')
-                pr=etree.SubElement(p,'{'+W+'}pPr');spacing=etree.SubElement(pr,'{'+W+'}spacing');spacing.set('{'+W+'}after','50')
-                r=etree.SubElement(p,'{'+W+'}r');rp=etree.SubElement(r,'{'+W+'}rPr');size=etree.SubElement(rp,'{'+W+'}sz');size.set('{'+W+'}val','18')
-                etree.SubElement(r,'{'+W+'}t').text=value
+        section=body.find('{'+W+'}sectPr')
+        page_size=section.find('{'+W+'}pgSz');margins=section.find('{'+W+'}pgMar')
+        width=int(page_size.get('{'+W+'}w'))-sum(int(margins.get('{'+W+'}'+side,'0')) for side in ['left','right','gutter'])
+        tbl=feature_table(rows,width,tables[1].find('{'+W+'}tblPr'))
         anchor.addnext(tbl)
         anchor=tables[3]
         cited=[r for r in (knowledge or []) if r['id'] in text['citations']]
