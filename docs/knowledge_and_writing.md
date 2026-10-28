@@ -1,3 +1,7 @@
+# 真实数据版本补充
+
+2026年10月28日起新增真实数据处理；当前说明以[真实案例输入与使用](real_case_format.md)为准。下文保留历史模拟版本的实现细节，适用于旧报告，不代表新版真实数据会复算信号。
+
 # 知识导入与写作约定
 
 知识文档和诊断规则通过两个独立入口维护。DOCX导入不会创建、修改或启用规则。
@@ -22,6 +26,6 @@ API失败或模型输出未通过格式、数字、引用、部分确定性表�
 
 ## 流程及留存
 
-LangGraph顺序为collect→quality→algorithms→rules→knowledge→write→render→validate→export。上传预检查与collect/quality复用解析函数，上传包保存后按不可变案例ID生成报告。SQLite保存任务状态和事件，不支持节点级断点续跑。
+LangGraph顺序为collect→quality→prepare_evidence→rules→knowledge→write→render→validate→export。prepare_evidence为分析依据整理节点（原名algorithms）；本次改名保留现有模拟数据的复算逻辑，真实数据直接使用客户最终值的接入逻辑另行改造。上传预检查与collect/quality复用解析函数，上传包保存后按不可变案例ID生成报告。SQLite保存任务状态和事件，不支持节点级断点续跑。
 
 每份报告保存`writer_input.json`，可以核对实际准备的全部写作资料；`evidence.json`保存算法、规则、差异、知识、写作模式及上下文预算；`snapshot.json`保存原数据快照。上述文件及原始上传包属于私有运行数据，不提交Git。

@@ -74,6 +74,9 @@ def feature_table(rows, width, template_properties):
     return tbl
 
 def export_docx(reference,snapshot,analysis,decision,text,out,knowledge=None,writer=None):
+    if snapshot.get('mode')=='real_measurement':
+        from .real_export import export_real
+        return export_real(Path(reference),snapshot,analysis,decision,text,out,knowledge or [],writer or {})
     if not Path(reference).exists():raise FileNotFoundError('服务器缺少 inputs/reference.docx')
     if hashlib.sha256(Path(reference).read_bytes()).hexdigest()!='3dea2931998ac6034e9f1122aae644e7860e53aa075ebd0fc45a2615b758c402':raise ValueError('报告模板版本不匹配，请重新核对槽位')
     with ZipFile(reference) as z:

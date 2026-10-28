@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlsplit
 import json,os,uuid,threading,re,io
 from zipfile import ZipFile,BadZipFile
 from datetime import datetime
@@ -33,8 +34,9 @@ def initial_knowledge():
 @app.get('/')
 def index():return FileResponse(ROOT/'app/static/index.html')
 @app.get('/api/config')
-def config():return {'samples':[{'id':p.stem,'name':{'stable':'稳定对照','rising':'振动上升','impulse':'冲击特征','missing':'数据缺失'}.get(p.stem,p.stem)} for p in sorted((ROOT/'samples').glob('*.zip'))],
+def config():return {'samples':[], 'input_profile':'real_measurement_v1.1',
     'model_enabled':os.getenv('LLM_ENABLED','false').lower()=='true' and bool(os.getenv('MODEL_API_KEY')),
+    'model_name':os.getenv('MODEL_NAME','未配置'), 'model_host':urlsplit(os.getenv('MODEL_BASE_URL','')).hostname,
     'context_limit':int(os.getenv('MODEL_CONTEXT_TOKENS','65536'))}
 @app.get('/api/health')
 def health():return {'status':'ok','project':'device-report-demo'}
@@ -42,26 +44,25 @@ class Request(BaseModel):
     case_id:str
     use_llm:bool=False
 
-@app.get('/api/samples/{name}')
-def sample(name:str):
-    if name not in ['stable','rising','impulse','missing']:raise HTTPException(404,'样例不存在')
-    return FileResponse(ROOT/'samples'/f'{name}.zip',filename=f'{name}.zip')
-
 @app.post('/api/cases')
 async def upload_case(file:UploadFile=File(...)):
     if not file.filename or not file.filename.lower().endswith('.zip'):raise HTTPException(400,'请上传ZIP案例数据包')
     raw=await file.read(MAX_ZIP+1)
     try:
-        snap=parse_zip(raw);snap['quality']=check_snapshot(snap);a=analyse(snap)
+        snap=parse_zip(raw)
+        if snap.get('mode')!='real_measurement':raise ValueError('新版工作台仅接受真实案例输入包，请使用1.1版格式')
+        snap['quality']=check_snapshot(snap);a=analyse(snap)
     except (ValueError,TypeError,KeyError,OverflowError) as e:raise HTTPException(400,str(e))
     cid=uuid.uuid4().hex
     folder=WORK/'cases';folder.mkdir(exist_ok=True)
     (folder/f'{cid}.zip').write_bytes(raw)
-    preview={'case_id':cid,'title':snap['title'],'device':snap['device'],'mode':'simulated',
+    preview={'case_id':cid,'title':snap['title'],'device':snap['device'],'mode':snap.get('mode','simulated'),
              'measurement':{k:snap[k] for k in ['measured_time','sampling_rate','sample_count','duration_seconds']},
-             'history_count':len(snap['history']),'has_waveform':snap['waveform'] is not None,
+             'history_count':sum(len(d['rows']) for d in snap.get('datasets',[]) if d['kind']=='trend') if snap.get('mode')=='real_measurement' else len(snap['history']),'has_waveform':snap['waveform'] is not None,
              'warnings':a['warnings'],'limitations':a['missing'],'comparisons':a['comparisons'],
-             'features':a['features'],'feature_source':a['feature_source']}
+             'features':a['features'],'feature_source':a['feature_source'],
+             'series':a.get('series',[]),'chart_manifest':a.get('chart_manifest',[]),
+             'order_coordinates':a.get('order_coordinates',[]),'has_spectrum':a.get('spectrum_provided',False)}
     (folder/f'{cid}.json').write_text(json.dumps(preview,ensure_ascii=False))
     return preview
 
@@ -91,6 +92,7 @@ def artifact(rid:str,name:str):
     item=get_run(rid)
     if item['status']!='done':raise HTTPException(409,'报告尚未生成完成')
     allowed=['report.docx','report.pdf','trend.png','waveform.png','spectrum.png','evidence.json','snapshot.json','writer_input.json']
+    if item.get('mode')=='real_measurement':allowed += [ch['file'] for ch in item['analysis'].get('chart_manifest',[])]
     if name not in allowed or not (WORK/rid/name).is_file():raise HTTPException(404,'文件不存在')
     return FileResponse(WORK/rid/name,filename=name)
 @app.get('/api/knowledge')

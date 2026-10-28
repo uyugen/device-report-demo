@@ -65,6 +65,9 @@ def simulate(scenario='rising', seed=20261022):
     }
 
 def analyse(snapshot):
+    if snapshot.get('mode') == 'real_measurement':
+        from .real_data import prepare_real
+        return prepare_real(snapshot)
     supplied={k:snapshot.get('current_features',{}).get(k) for k in FEATURES}
     checks=snapshot.get('quality',{'warnings':[],'limitations':[]})
     base={'uploaded_features':supplied,'recomputed_features':{},'comparisons':[],

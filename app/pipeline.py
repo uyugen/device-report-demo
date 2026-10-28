@@ -24,17 +24,18 @@ class State(TypedDict,total=False):
     knowledge:list;text:dict;writer:dict;summary:str;pdf:dict;output:dict;rules:list
 
 def log(state,label):
-    state['events']=[*state.get('events',[]),{'step':label,'time':datetime.now(timezone.utc).isoformat()}]
+    import inspect
+    state['events']=[*state.get('events',[]),{'node':inspect.currentframe().f_back.f_code.co_name,'step':label,'time':datetime.now(timezone.utc).isoformat()}]
     save(state['run_id'],'running',{'id':state['run_id'],'case_id':state['case_id'],'events':state['events']})
     return state
 def collect(s):
     s['snapshot']=parse_zip(Path(s['case_path']).read_bytes())
-    log(s,'解析上传案例：台账、历史、当前特征及可选波形');return s
+    log(s,'解析上传案例：台账、特征与图谱及来源对应');return s
 def quality(s):
     s['snapshot']['quality']=check_snapshot(s['snapshot'])
     log(s,'核对必填字段、单位、时间对应关系与采样参数');return s
-def algorithms(s):
-    s['analysis']=analyse(s['snapshot']);log(s,'保留上传特征，复算可用波形并检查差异');return s
+def prepare_evidence(s):
+    s['analysis']=analyse(s['snapshot']);log(s,'整理客户最终值与来源，读取倍频精确坐标，不复算信号' if s['snapshot'].get('mode')=='real_measurement' else '整理模拟案例特征与复算依据');return s
 def rules(s):
     s['rules']=json.loads((ROOT/'config/rules.json').read_text())
     s['decision']=evaluate(s['snapshot'],s['analysis'],s['rules']);log(s,'执行规则并列出未知条件');return s
@@ -43,7 +44,17 @@ def knowledge(s):
     s['knowledge']=retrieve(records);log(s,f'载入全部知识条目（{len(records)}条，不过滤、不截断）');return s
 def write(s):
     snap=s['snapshot'];a=s['analysis']
-    facts={'mode':'simulated','case_id':snap['case_id'],'device':snap['device'],
+    if snap.get('mode')=='real_measurement':
+        from .real_data import real_facts
+        facts=real_facts(snap,a,s['decision'])
+    else:
+        facts=simulation_facts(snap,a,s['decision'])
+    out=WORK/s['run_id'];out.mkdir(exist_ok=True)
+    (out/'writer_input.json').write_text(json.dumps({'facts':facts,'knowledge':s['knowledge']},ensure_ascii=False,indent=2),encoding='utf-8')
+    s['text'],s['writer']=write_report(facts,s['knowledge'],s['use_llm']);log(s,'结合实测依据与全部知识编写机理分析及建议');return s
+
+def simulation_facts(snap,a,decision):
+    return {'mode':'simulated','case_id':snap['case_id'],'device':snap['device'],
            'availability':{'raw_waveform_provided':snap['waveform'] is not None,
                            'raw_waveform_array_omitted_from_prompt':True,
                            'spectrum_computed':bool(a['frequency']),
@@ -51,19 +62,19 @@ def write(s):
            'measurement':{k:snap[k] for k in ['measured_time','sampling_rate','sample_count','duration_seconds','unit','feature_units']},
            'uploaded_current_features':a['uploaded_features'],'recomputed_features':a['recomputed_features'],
            'analysis_features':a['features'],'feature_source':a['feature_source'],'feature_comparisons':a['comparisons'],
-           'history_features':snap['history'],'trend_statistics':{k:s['decision'][k] for k in ['first','last','change_percent','trend_count','trend_start','trend_end']},
+           'history_features':snap['history'],'trend_statistics':{k:decision[k] for k in ['first','last','change_percent','trend_count','trend_start','trend_end']},
            'spectrum_peaks':a['peaks'],'spectrum_amplitude_unit':'m/s²（单边峰值幅度）',
-           'decision':s['decision'],'missing':a['missing'],'data_warnings':a['warnings'],
+           'decision':decision,'missing':a['missing'],'data_warnings':a['warnings'],
            'rpm_available':a['rpm_available'],'processing':snap['processing']}
-    out=WORK/s['run_id'];out.mkdir(exist_ok=True)
-    (out/'writer_input.json').write_text(json.dumps({'facts':facts,'knowledge':s['knowledge']},ensure_ascii=False,indent=2))
-    s['text'],s['writer']=write_report(facts,s['knowledge'],s['use_llm']);log(s,'编写机理说明与检维修建议');return s
 def render(s):
     out=WORK/s['run_id'];out.mkdir(exist_ok=True)
     draw(s['snapshot'],s['analysis'],out);log(s,'按同一数据快照绘制趋势、波形与频谱');return s
 def validate(s):
     # Deterministic report values remain outside model-generated text.
     if s['decision']['fault']!='未定位' or s['decision']['severity']!='未分级':raise ValueError('未经审核的结论')
+    if s['snapshot'].get('mode')=='real_measurement':
+        if s['analysis']['signal_recalculation'] or s['analysis']['history_linked_to_latest']:
+            raise ValueError('真实数据不得复算信号或未经确认绑定采集')
     if s['analysis']['recomputed_features']:
         f=s['analysis']['features']
         if f['acceleration_rms'] and abs(f['crest_factor']-f['acceleration_peak']/f['acceleration_rms'])>1e-9:raise ValueError('峰值因子不一致')
@@ -73,7 +84,7 @@ def export(s):
     s['pdf']=export_pdf(out);log(s,'生成Word与PDF并归档依据');return s
 
 builder=StateGraph(State)
-nodes=[collect,quality,algorithms,rules,knowledge,write,render,validate,export]
+nodes=[collect,quality,prepare_evidence,rules,knowledge,write,render,validate,export]
 last=START
 for node in nodes:builder.add_node(node.__name__,node);builder.add_edge(last,node.__name__);last=node.__name__
 builder.add_edge(last,END)
@@ -90,7 +101,7 @@ def run(run_id,case_id,case_path,use_llm):
                   'quality':s['snapshot']['quality'],'case_id':s['snapshot']['case_id'],
                   'rules':s['rules'],'template_sha256':hashlib.sha256((ROOT/'inputs/reference.docx').read_bytes()).hexdigest()}
         (out/'evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
-        report={'id':run_id,'case_id':s['snapshot']['case_id'],'case_title':s['snapshot']['title'],'mode':'simulated','events':s['events'],
+        report={'id':run_id,'case_id':s['snapshot']['case_id'],'case_title':s['snapshot']['title'],'mode':s['snapshot'].get('mode','simulated'),'events':s['events'],
                 'device':s['snapshot']['device'],'measured_time':s['snapshot']['measured_time'],
                 'summary':s['summary'],'decision':s['decision'],'analysis':evidence['analysis'],
                 'knowledge':s['knowledge'],'writer':s['writer'],'text':s['text'],'pdf':s['pdf'],

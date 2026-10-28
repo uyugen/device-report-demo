@@ -1,18 +1,18 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>设备状态报告工作台</title><link rel="stylesheet" href="/static/style.css?v=20261023"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>设备状态报告工作台</title><link rel="stylesheet" href="/static/style.css?v=20261028"></head>
 <body>
 <header class="app-header"><div class="header-inner">
 <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h11l5 5v13H4zM14 3v6h6M7 15h2l2-4 2 7 2-4h2"/></svg></span><div><strong>设备状态报告</strong><small>数据检查与报告编制</small></div></div>
-<div class="header-actions"><nav class="document-tabs" aria-label="资料管理"><button id="open-knowledge" aria-haspopup="dialog" aria-expanded="false" aria-controls="knowledge-dialog">知识文档 <span id="knowledge-total">—</span></button><button id="open-rules" aria-haspopup="dialog" aria-expanded="false" aria-controls="rules-dialog">诊断规则</button></nav><span class="demo-label">模拟数据演示</span></div>
+<div class="header-actions"><nav class="document-tabs" aria-label="资料管理"><button id="open-knowledge" aria-haspopup="dialog" aria-expanded="false" aria-controls="knowledge-dialog">知识文档 <span id="knowledge-total">—</span></button><button id="open-rules" aria-haspopup="dialog" aria-expanded="false" aria-controls="rules-dialog">诊断规则</button></nav><span class="demo-label">真实数据验证</span></div>
 </div></header>
 <main>
 <aside class="control-panel" aria-label="案例与报告编制">
  <div class="sidebar-scroll">
-  <section class="input-section"><div class="section-title"><h1>案例数据上传</h1><span>ZIP</span></div><p class="hint">上传一个测点的台账、特征表和可选波形。</p>
+  <section class="input-section"><div class="section-title"><h1>案例数据上传</h1><span>ZIP</span></div><p class="hint">上传真实案例包：case.json 与 data 目录下的特征、波形和频谱 CSV。</p>
    <label class="file-select" for="case-file"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></svg></span><strong>选择案例数据包</strong><span id="case-filename">ZIP 文件，最大 20 MB</span></label><input id="case-file" type="file" accept=".zip" class="sr-only">
    <button id="import-case" class="primary full">导入并检查</button>
-   <details class="sample-box"><summary>下载样例数据</summary><div id="samples" class="sample-links"></div><p class="hint">四组样例均为模拟数据。下载后通过上方入口上传。</p></details>
+   <p class="hint">使用客户提供的最终值，不复算信号。缺失信息在检查后列明。</p>
   </section>
   <section id="case-preview" class="input-section" hidden></section>
  </div>
@@ -22,11 +22,11 @@
  </div>
 </aside>
 <section class="workspace" aria-label="报告预览"><div class="toolbar"><div><strong>报告预览</strong><span id="report-state">尚未生成</span></div><div id="downloads" aria-label="报告操作"></div></div>
- <div id="empty" class="document-empty"><div class="document-heading"><span>设备状态分析报告</span><span class="stamp">模拟数据</span></div><p>导入案例并完成检查后，在此查看报告。</p><div class="outline"><div>结论摘要</div><div>设备与数据范围</div><div>振动趋势</div><div>时域波形与频谱</div><div>综合判定与检维修措施</div><div>参考源与编制记录</div></div><div class="empty-footer">数值与图表由程序生成，故障判断依据独立规则。支持 Word / PDF 导出。</div></div>
+ <div id="empty" class="document-empty"><div class="document-heading"><span>设备状态分析报告</span><span class="stamp">真实数据</span></div><p>导入案例并完成检查后，在此查看报告。</p><div class="outline"><div>结论摘要</div><div>设备与数据范围</div><div>振动趋势</div><div>时域波形与频谱</div><div>综合判定与检维修措施</div><div>参考源与编制记录</div></div><div class="empty-footer">数值来自客户输入，程序按原始坐标绘图。机理分析附来源，支持 Word / PDF 导出。</div></div>
  <article id="report" hidden></article>
 </section>
 </main>
 <dialog id="knowledge-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><h2 id="knowledge-title">知识文档</h2><p class="hint">完整条目用于写作参考，文中的规则不会自动执行。当前不使用 RAG。</p></div><button data-close="knowledge-dialog" aria-label="关闭知识文档">关闭</button></div><div class="import-row"><label for="knowledge-file" class="sr-only">DOCX知识文档</label><input id="knowledge-file" type="file" accept=".docx"><button id="upload" class="primary">导入 DOCX</button></div><p id="knowledge-status" role="status"></p><p id="knowledge-budget" class="hint"></p><div id="knowledge-list"></div></dialog>
 <dialog id="rules-dialog" aria-labelledby="rules-title"><div class="dialog-heading"><div><h2 id="rules-title">诊断规则</h2><p class="hint">独立配置。趋势阈值仅供演示，待审核的轴承规则保持禁用。</p></div><button data-close="rules-dialog">关闭</button></div><label for="rules">规则 JSON</label><textarea id="rules" spellcheck="false"></textarea><button id="save-rules" class="primary">保存规则</button><p id="rules-status" role="status"></p></dialog>
-<script src="/static/app.js?v=20261023"></script>
+<script src="/static/real.js?v=20261028"></script><script src="/static/app.js?v=20261028"></script>
 </body></html>

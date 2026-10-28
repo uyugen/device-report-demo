@@ -22,11 +22,18 @@ def client(tmp_path,monkeypatch):
 
 
 def test_zip_http_and_missing_evidence(client):
-    raw=(main.ROOT/'samples/missing.zip').read_bytes()
-    r=client.post('/api/cases',files={'file':('missing.zip',raw,'application/zip')})
+    from test_real_input import real_zip
+    r=client.post('/api/cases',files={'file':('real.zip',real_zip(),'application/zip')})
     assert r.status_code==200
-    d=r.json();assert not d['has_waveform'] and d['features']['velocity_rms'] is not None
+    d=r.json();assert d['has_waveform'] and d['mode']=='real_measurement' and d['series']
     assert len(d['case_id'])==32 and d['limitations']
+
+
+def test_simulated_downloads_are_removed(client):
+    assert client.get('/api/config').json()['samples']==[]
+    assert client.get('/api/samples/stable').status_code==404
+    raw=(main.ROOT/'samples/stable.zip').read_bytes()
+    assert client.post('/api/cases',files={'file':('old.zip',raw)}).status_code==400
 
 
 def test_invalid_zip_http(client):

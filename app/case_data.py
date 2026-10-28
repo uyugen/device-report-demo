@@ -59,6 +59,14 @@ def csv_rows(raw, name, required, max_rows):
 
 
 def parse_zip(raw):
+    from .real_data import members, parse_real
+    real_members = members(raw)
+    try:
+        manifest = json.loads(real_members.get('case.json', b'{}').decode('utf-8-sig'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError('case.json不是有效UTF-8 JSON') from None
+    if isinstance(manifest, dict) and manifest.get('data_type') == 'real_measurement':
+        return parse_real(real_members)
     if len(raw) > MAX_ZIP:
         raise ValueError('案例ZIP不能超过20MB')
     allowed = {'case.json', 'history.csv', 'current_features.csv', 'waveform.csv'}
@@ -98,6 +106,9 @@ def parse_zip(raw):
 
 def check_snapshot(s):
     """Fatal schema/units errors stop; missing evidence and mismatches remain visible."""
+    if s.get('mode') == 'real_measurement':
+        from .real_data import check_real
+        return check_real(s)
     if s.get('schema_version') != 1 or s.get('simulated') is not True:
         raise ValueError('仅接受schema_version=1且simulated=true的模拟案例')
     for key in ['case_id', 'title', 'measured_time']:

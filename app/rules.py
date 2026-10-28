@@ -16,6 +16,9 @@ def validate_rules(rules):
     return rules
 
 def evaluate(snapshot,analysis,rules):
+    if snapshot.get('mode') == 'real_measurement':
+        from .real_data import real_decision
+        return real_decision(snapshot, analysis, rules)
     h=[r for r in snapshot['history'] if r.get('velocity_rms') is not None]
     first=h[0]['velocity_rms'] if h else None
     last=h[-1]['velocity_rms'] if h else None

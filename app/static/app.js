@@ -32,6 +32,7 @@ function featureTable(uploaded, computed) {
   return `<div class="table-scroll"><table class="feature-table"><thead><tr><th>当前特征</th><th>单位</th><th class="numeric">上传值</th><th class="numeric">波形复算值</th></tr></thead><tbody>${Object.entries(labels).map(([key,[label,unit]]) => `<tr><td>${label}</td><td class="unit">${unit}</td><td class="numeric">${nf(uploaded?.[key])}</td><td class="numeric">${nf(computed?.[key])}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderCasePreview(data, archived = false) {
+  if (data.mode === 'real_measurement') return realCasePreview(data, archived);
   const panel = $('case-preview');
   const uploaded = data.has_waveform ? Object.fromEntries(data.comparisons.map(r => [r.feature, r.uploaded])) : data.features;
   const computed = Object.fromEntries(data.comparisons.map(r => [r.feature, r.recomputed]));
@@ -59,9 +60,8 @@ async function init() {
   try {
     const config = await request('/api/config');
     contextLimit = config.context_limit;
-    $('samples').innerHTML = config.samples.map(s => `<a href="/api/samples/${encodeURIComponent(s.id)}" download>${esc(s.name)} ZIP</a>`).join('');
-    $('llm').checked = config.model_enabled;
-    $('model-note').textContent = config.model_enabled ? '已配置模型，仅用于说明与建议。' : '未配置模型，将使用固定文字模板。';
+    $('llm').checked = false;
+    $('model-note').textContent = config.model_enabled ? `可选模型 ${config.model_name}（${config.model_host}）。勾选后将向此接口发送整理后的实测依据与知识条目；默认使用固定说明。` : '未配置模型，将使用固定文字模板。';
     $('rules').value = JSON.stringify(await request('/api/rules'), null, 2);
     await updateKnowledge();
     const id = new URLSearchParams(location.search).get('report');
@@ -102,7 +102,7 @@ $('generate').onclick = async () => {
 async function poll() {
   try {
     const data = await request('/api/reports/' + active);
-    $('steps').innerHTML = (data.events || []).map(e => `<li>${esc(e.step)}</li>`).join('');
+    $('steps').innerHTML = (data.events || []).map(e => `<li>${e.node ? `<span class="numeric">${esc(e.node)}</span><br>` : ''}${esc(e.step)}</li>`).join('');
     if (data.status === 'running') {
       busy = true; syncButton(); $('status').textContent = '正在生成报告…'; setTimeout(poll, 1200); return;
     }
@@ -117,14 +117,17 @@ async function restoreCasePreview(report) {
   try {
     const snapshot = await request(`/api/reports/${encodeURIComponent(report.id)}/files/snapshot.json`);
     if (caseId || $('case-file').files.length || active !== report.id) return;
-    renderCasePreview({title:report.case_title || snapshot.title, device:report.device,
+    renderCasePreview({title:report.case_title || snapshot.title, device:report.device, mode:report.mode,
       measurement:snapshot, history_count:snapshot.history.length, has_waveform:snapshot.waveform != null,
       warnings:report.analysis.warnings, limitations:report.analysis.missing,
-      comparisons:report.analysis.comparisons || [], features:report.analysis.uploaded_features || report.analysis.features}, true);
+      comparisons:report.analysis.comparisons || [], features:report.analysis.uploaded_features || report.analysis.features,
+      series:report.analysis.series || [],chart_manifest:report.analysis.chart_manifest || [],
+      order_coordinates:report.analysis.order_coordinates || [],has_spectrum:report.analysis.spectrum_provided}, true);
   } catch { /* The report remains available when an older archive lacks a snapshot. */ }
 }
 
 function render(data) {
+  if (data.mode === 'real_measurement') return renderReal(data);
   const base = `/api/reports/${encodeURIComponent(data.id)}/files/`;
   const analysis = data.analysis;
   const section = (number, title, body) => `<section class="report-section"><h3><span>${number}</span>${title}</h3>${body}</section>`;

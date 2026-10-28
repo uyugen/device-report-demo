@@ -90,7 +90,7 @@ def test_no_waveform_does_not_create_features(samples):
 
 def test_unsafe_zip_rejected(samples):
     raw=mutate((samples/'stable.zip').read_bytes(),lambda d:d.update({'../attack.txt':b'x'}))
-    with pytest.raises(ValueError,match='根目录'):parse_zip(raw)
+    with pytest.raises(ValueError,match='不安全路径'):parse_zip(raw)
 
 
 def test_nonfinite_rejected(samples):
