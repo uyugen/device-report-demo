@@ -62,6 +62,7 @@ async def upload_case(file:UploadFile=File(...)):
              'warnings':a['warnings'],'limitations':a['missing'],'comparisons':a['comparisons'],
              'features':a['features'],'feature_source':a['feature_source'],
              'series':a.get('series',[]),'chart_manifest':a.get('chart_manifest',[]),
+             'acquisition_status':a.get('acquisition_status'),
              'order_coordinates':a.get('order_coordinates',[]),'has_spectrum':a.get('spectrum_provided',False)}
     (folder/f'{cid}.json').write_text(json.dumps(preview,ensure_ascii=False))
     return preview
@@ -91,7 +92,7 @@ def report(rid:str):return get_run(rid)
 def artifact(rid:str,name:str):
     item=get_run(rid)
     if item['status']!='done':raise HTTPException(409,'报告尚未生成完成')
-    allowed=['report.docx','report.pdf','trend.png','waveform.png','spectrum.png','evidence.json','snapshot.json','writer_input.json']
+    allowed=['report.docx','report.pdf','trend.png','waveform.png','spectrum.png','evidence.json','snapshot.json','writer_input.json','rule_matches.csv']
     if item.get('mode')=='real_measurement':allowed += [ch['file'] for ch in item['analysis'].get('chart_manifest',[])]
     if name not in allowed or not (WORK/rid/name).is_file():raise HTTPException(404,'文件不存在')
     return FileResponse(WORK/rid/name,filename=name)

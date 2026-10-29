@@ -57,11 +57,10 @@ def draw_real(snapshot, analysis, out):
         d = next(d for d in snapshot['datasets'] if d['dataset_id']==chart['dataset_id'])
         x = [datetime.fromisoformat(r['x']) for r in d['rows']] if d['kind']=='trend' else [float(r['x']) for r in d['rows']]
         y = [float(r['y']) for r in d['rows']]
-        fig, ax = plt.subplots(figsize=(9.5,3.65))
-        if chart.get('chart_type')=='scatter':
-            ax.scatter(x,y,color='#2563eb',s=7)
-        else:
-            ax.plot(x,y,color='#2563eb',lw=.9)
+        fig, ax = plt.subplots(figsize=(9.5,3.3 if analysis.get('report_plan') else 3.65))
+        # Connect the original measured points without resampling or filling gaps.
+        ax.plot(x,y,color='#2563eb',lw=.9,marker='o' if d['kind']=='trend' else None,
+                markersize=2 if d['kind']=='trend' else 0)
         if d['kind']=='trend':
             locator=AutoDateLocator(minticks=3,maxticks=6)
             ax.xaxis.set_major_locator(locator);ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))

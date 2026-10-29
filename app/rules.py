@@ -7,18 +7,24 @@ def validate_rules(rules):
         ids.add(rule['id'])
         if not isinstance(rule.get('name'),str) or not isinstance(rule.get('source'),str):raise ValueError('规则必须有名称和来源')
         if rule.get('kind')=='bearing_draft' and not isinstance(rule.get('pending'),str):raise ValueError('草稿规则必须说明待确认事项')
-        if rule.get('kind') not in ['demo_trend','bearing_draft']:raise ValueError('不支持的规则类型')
+        if rule.get('kind') not in ['demo_trend','bearing_draft','mechanism']:raise ValueError('不支持的规则类型')
         if not isinstance(rule.get('enabled'),bool):raise ValueError('enabled必须为布尔值')
         if rule['kind']=='bearing_draft' and rule['enabled']:raise ValueError('轴承规则尚待审核，不能启用')
         if rule['kind']=='demo_trend':
             n=rule.get('threshold_percent')
             if isinstance(n,bool) or not isinstance(n,(int,float)) or not 0<n<=1000:raise ValueError('趋势阈值须在0到1000之间')
+        if rule['kind']=='mechanism':
+            from .mechanism_rules import validate_mechanism
+            validate_mechanism(rule)
     return rules
 
-def evaluate(snapshot,analysis,rules):
+def evaluate(snapshot,analysis,rules,knowledge=None):
     if snapshot.get('mode') == 'real_measurement':
+        if any(r.get('kind')=='mechanism' for r in rules):
+            from .mechanism_rules import match_rules
+            return match_rules(snapshot,analysis,rules,knowledge or [])
         from .real_data import real_decision
-        return real_decision(snapshot, analysis, rules)
+        return real_decision(snapshot,analysis,rules)
     h=[r for r in snapshot['history'] if r.get('velocity_rms') is not None]
     first=h[0]['velocity_rms'] if h else None
     last=h[-1]['velocity_rms'] if h else None

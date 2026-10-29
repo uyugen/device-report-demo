@@ -1,22 +1,168 @@
 [
   {
-    "id": "DEMO-TREND-001",
-    "name": "同工况趋势变化演示阈值",
+    "id": "MOTOR-001",
+    "kind": "mechanism",
+    "name": "电机滚动轴承故障",
+    "fault": "电机滚动轴承故障",
+    "category": "电动机",
+    "source": "已导入机理文档 / 电动机 / 电机滚动轴承故障",
+    "source_rule_text": "加速度峭度指标大于等于3.5且小于4.5，低频冲击值大于等于8且小于16，加速度峰值与加速度有效值的比值大于等于4。",
     "enabled": true,
-    "source": "Demo功能测试配置，非行业标准",
-    "kind": "demo_trend",
-    "threshold_percent": 30,
-    "fault": "未定位",
-    "severity": null
+    "conditions": [
+      {
+        "id": "C1",
+        "name": "3.5 ≤ 峭度 < 4.5",
+        "metric": "kurtosis",
+        "gte": 3.5,
+        "lt": 4.5
+      },
+      {
+        "id": "C2",
+        "name": "8 ≤ 低频冲击值 < 16",
+        "metric": "low_frequency_impulse",
+        "gte": 8,
+        "lt": 16
+      },
+      {
+        "id": "C3",
+        "name": "加速度峰值 / 加速度有效值 ≥ 4",
+        "numerator": {
+          "feature": "acceleration_peak"
+        },
+        "denominator": "acceleration_rms",
+        "gte": 4
+      }
+    ]
   },
   {
-    "id": "KB-MOTOR-BEARING",
-    "name": "电机滚动轴承规则草稿",
-    "enabled": false,
-    "source": "知识文档 电动机 / 电机滚动轴承故障",
-    "kind": "bearing_draft",
-    "fault": "滚动轴承故障候选",
-    "severity": null,
-    "pending": "低频冲击值算法和条件连接方式待确认；禁用时只展示，不产生故障候选"
+    "id": "MOTOR-002",
+    "kind": "mechanism",
+    "name": "电机转子不平衡",
+    "fault": "电机转子不平衡",
+    "category": "电动机",
+    "source": "已导入机理文档 / 电动机 / 电机转子不平衡",
+    "source_rule_text": "一倍频幅值与速度有效值的比值大于等于0.6，二倍频、四倍频、六倍频和八倍频幅值的能量和与速度有效值的比值小于0.25，加速度峭度指标小于3.5且通频速度有效值大于等于2.8且小于4.5。",
+    "enabled": true,
+    "conditions": [
+      {
+        "id": "C1",
+        "name": "1X幅值 / 速度有效值 ≥ 0.6",
+        "numerator": {
+          "orders": [
+            1
+          ]
+        },
+        "denominator": "velocity_rms",
+        "gte": 0.6
+      },
+      {
+        "id": "C2",
+        "name": "(2X+4X+6X+8X)幅值 / 速度有效值 < 0.25",
+        "numerator": {
+          "orders": [
+            2,
+            4,
+            6,
+            8
+          ]
+        },
+        "denominator": "velocity_rms",
+        "lt": 0.25
+      },
+      {
+        "id": "C3",
+        "name": "峭度 < 3.5",
+        "metric": "kurtosis",
+        "lt": 3.5
+      },
+      {
+        "id": "C4",
+        "name": "2.8 ≤ 速度有效值 < 4.5",
+        "metric": "velocity_rms",
+        "gte": 2.8,
+        "lt": 4.5
+      }
+    ]
+  },
+  {
+    "id": "MOTOR-003",
+    "kind": "mechanism",
+    "name": "电机转子不对中",
+    "fault": "电机转子不对中",
+    "category": "电动机",
+    "source": "已导入机理文档 / 电动机 / 电机转子不对中",
+    "source_rule_text": "二倍频幅值与速度有效值的比值大于等于0.3，三倍频、六倍频和九倍频幅值的能量和与速度有效值的比值小于0.25，加速度峭度指标小于3.5且通频速度有效值大于等于2.8且小于4.5。",
+    "enabled": true,
+    "conditions": [
+      {
+        "id": "C1",
+        "name": "2X幅值 / 速度有效值 ≥ 0.3",
+        "numerator": {
+          "orders": [
+            2
+          ]
+        },
+        "denominator": "velocity_rms",
+        "gte": 0.3
+      },
+      {
+        "id": "C2",
+        "name": "(3X+6X+9X)幅值 / 速度有效值 < 0.25",
+        "numerator": {
+          "orders": [
+            3,
+            6,
+            9
+          ]
+        },
+        "denominator": "velocity_rms",
+        "lt": 0.25
+      },
+      {
+        "id": "C3",
+        "name": "峭度 < 3.5",
+        "metric": "kurtosis",
+        "lt": 3.5
+      },
+      {
+        "id": "C4",
+        "name": "2.8 ≤ 速度有效值 < 4.5",
+        "metric": "velocity_rms",
+        "gte": 2.8,
+        "lt": 4.5
+      }
+    ]
+  },
+  {
+    "id": "MOTOR-004",
+    "kind": "mechanism",
+    "name": "电机部件连接松动",
+    "fault": "电机部件连接松动",
+    "category": "电动机",
+    "source": "已导入机理文档 / 电动机 / 电机部件连接松动",
+    "source_rule_text": "三倍频、六倍频和九倍频幅值的能量和与速度有效值的比值小于0.25，通频速度有效值大于等于2.8且小于4.5。",
+    "enabled": true,
+    "conditions": [
+      {
+        "id": "C1",
+        "name": "(3X+6X+9X)幅值 / 速度有效值 < 0.25",
+        "numerator": {
+          "orders": [
+            3,
+            6,
+            9
+          ]
+        },
+        "denominator": "velocity_rms",
+        "lt": 0.25
+      },
+      {
+        "id": "C2",
+        "name": "2.8 ≤ 速度有效值 < 4.5",
+        "metric": "velocity_rms",
+        "gte": 2.8,
+        "lt": 4.5
+      }
+    ]
   }
 ]

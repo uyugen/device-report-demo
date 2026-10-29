@@ -38,7 +38,24 @@ def prepare_evidence(s):
     s['analysis']=analyse(s['snapshot']);log(s,'整理客户最终值与来源，读取倍频精确坐标，不复算信号' if s['snapshot'].get('mode')=='real_measurement' else '整理模拟案例特征与复算依据');return s
 def rules(s):
     s['rules']=json.loads((ROOT/'config/rules.json').read_text())
-    s['decision']=evaluate(s['snapshot'],s['analysis'],s['rules']);log(s,'执行规则并列出未知条件');return s
+    from .rules import validate_rules
+    validate_rules(s['rules'])
+    path=WORK/'knowledge.json';records=json.loads(path.read_text()) if path.exists() else []
+    s['decision']=evaluate(s['snapshot'],s['analysis'],s['rules'],records)
+    if s['snapshot'].get('mode')=='real_measurement':
+        if s['decision'].get('profile')=='mechanism_matching_v2':
+            from .reader_report import build_report_plan
+            plan=build_report_plan(s['snapshot'],s['analysis'],s['decision'],s['rules'])
+            s['analysis']['report_plan']=plan
+            s['analysis']['available_chart_manifest']=s['analysis']['chart_manifest']
+            s['analysis']['chart_manifest']=plan['charts']
+        from .mechanism_rules import write_matches_csv
+        from .real_data import report_limitations
+        s['analysis']['missing']=report_limitations(s['analysis']['missing'])
+        s['snapshot']['quality']['limitations']=s['analysis']['missing']
+        out=WORK/s['run_id'];out.mkdir(exist_ok=True)
+        write_matches_csv(s['decision'],out/'rule_matches.csv')
+    log(s,'逐时刻执行机理条件、比值与满足数统计；共用最新频谱参考');return s
 def knowledge(s):
     path=WORK/'knowledge.json';records=json.loads(path.read_text()) if path.exists() else []
     s['knowledge']=retrieve(records);log(s,f'载入全部知识条目（{len(records)}条，不过滤、不截断）');return s
@@ -50,7 +67,8 @@ def write(s):
     else:
         facts=simulation_facts(snap,a,s['decision'])
     out=WORK/s['run_id'];out.mkdir(exist_ok=True)
-    (out/'writer_input.json').write_text(json.dumps({'facts':facts,'knowledge':s['knowledge']},ensure_ascii=False,indent=2),encoding='utf-8')
+    from .writer import system_prompt
+    (out/'writer_input.json').write_text(json.dumps({'system_prompt':system_prompt(facts),'facts':facts,'knowledge':s['knowledge']},ensure_ascii=False,indent=2),encoding='utf-8')
     s['text'],s['writer']=write_report(facts,s['knowledge'],s['use_llm']);log(s,'结合实测依据与全部知识编写机理分析及建议');return s
 
 def simulation_facts(snap,a,decision):
@@ -71,7 +89,13 @@ def render(s):
     draw(s['snapshot'],s['analysis'],out);log(s,'按同一数据快照绘制趋势、波形与频谱');return s
 def validate(s):
     # Deterministic report values remain outside model-generated text.
-    if s['decision']['fault']!='未定位' or s['decision']['severity']!='未分级':raise ValueError('未经审核的结论')
+    if s['decision']['severity']!='未分级':raise ValueError('未经审核的严重程度')
+    if s['decision'].get('profile')=='mechanism_matching_v2':
+        from .mechanism_rules import summarize
+        for rule in s['decision']['rules']:
+            for row in rule.get('records',[]):
+                if any(row[k]!=v for k,v in summarize(row['conditions']).items()):raise ValueError('条件计数与逐次记录不一致')
+    elif s['decision']['fault']!='未定位':raise ValueError('未经审核的结论')
     if s['snapshot'].get('mode')=='real_measurement':
         if s['analysis']['signal_recalculation'] or s['analysis']['history_linked_to_latest']:
             raise ValueError('真实数据不得复算信号或未经确认绑定采集')

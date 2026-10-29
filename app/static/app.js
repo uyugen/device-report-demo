@@ -122,6 +122,7 @@ async function restoreCasePreview(report) {
       warnings:report.analysis.warnings, limitations:report.analysis.missing,
       comparisons:report.analysis.comparisons || [], features:report.analysis.uploaded_features || report.analysis.features,
       series:report.analysis.series || [],chart_manifest:report.analysis.chart_manifest || [],
+      acquisition_status:report.analysis.acquisition_status,
       order_coordinates:report.analysis.order_coordinates || [],has_spectrum:report.analysis.spectrum_provided}, true);
   } catch { /* The report remains available when an older archive lacks a snapshot. */ }
 }
@@ -166,7 +167,7 @@ async function updateKnowledge() {
   $('knowledge-total').textContent = knowledge.length + ' 条';
   const bytes = new TextEncoder().encode(JSON.stringify(knowledge)).length;
   $('knowledge-budget').textContent = `已导入全部 ${knowledge.length} 条，知识 JSON 约 ${bytes.toLocaleString()} 字节。写作前按完整输入检查上下文；配置窗口 ${contextLimit.toLocaleString()} tokens，超限时停止并提示。`;
-  $('knowledge-list').innerHTML = knowledge.map(item => `<details class="knowledge-entry"><summary><span>${esc(item.id)}</span>${esc(item.category)} / ${esc(item.fault)}</summary><div class="accordion-body">${[['phenomena','机理现象'],['causes','原因'],['actions','措施'],['rule_text','规则原文（不执行）']].map(([key,label]) => `<h4>${label}</h4><p>${esc(item[key] || '文档未提供')}</p>`).join('')}<p class="citation">来源：${esc(item.source)} · ${esc(item.section)}</p></div></details>`).join('') || '<p class="hint">尚未导入知识文档。请使用一级标题划分设备类别、二级标题划分故障名称。</p>';
+  $('knowledge-list').innerHTML = knowledge.map(item => `<details class="knowledge-entry"><summary><span>${esc(item.id)}</span>${esc(item.category)} / ${esc(item.fault)}</summary><div class="accordion-body">${[['phenomena','机理现象'],['causes','原因'],['actions','措施'],['rule_text','规则原文（执行配置见诊断规则入口）']].map(([key,label]) => `<h4>${label}</h4><p>${esc(item[key] || '文档未提供')}</p>`).join('')}<p class="citation">来源：${esc(item.source)} · ${esc(item.section)}</p></div></details>`).join('') || '<p class="hint">尚未导入知识文档。请使用一级标题划分设备类别、二级标题划分故障名称。</p>';
 }
 for (const name of ['knowledge','rules']) {
   const dialog = $(`${name}-dialog`), button = $('open-' + name);

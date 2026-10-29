@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>设备状态报告工作台</title><link rel="stylesheet" href="/static/style.css?v=20261028"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>设备状态报告工作台</title><link rel="stylesheet" href="/static/style.css?v=20261029clean"></head>
 <body>
 <header class="app-header"><div class="header-inner">
 <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h11l5 5v13H4zM14 3v6h6M7 15h2l2-4 2 7 2-4h2"/></svg></span><div><strong>设备状态报告</strong><small>数据检查与报告编制</small></div></div>
@@ -27,6 +27,6 @@
 </section>
 </main>
 <dialog id="knowledge-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><h2 id="knowledge-title">知识文档</h2><p class="hint">完整条目用于写作参考，文中的规则不会自动执行。当前不使用 RAG。</p></div><button data-close="knowledge-dialog" aria-label="关闭知识文档">关闭</button></div><div class="import-row"><label for="knowledge-file" class="sr-only">DOCX知识文档</label><input id="knowledge-file" type="file" accept=".docx"><button id="upload" class="primary">导入 DOCX</button></div><p id="knowledge-status" role="status"></p><p id="knowledge-budget" class="hint"></p><div id="knowledge-list"></div></dialog>
-<dialog id="rules-dialog" aria-labelledby="rules-title"><div class="dialog-heading"><div><h2 id="rules-title">诊断规则</h2><p class="hint">独立配置。趋势阈值仅供演示，待审核的轴承规则保持禁用。</p></div><button data-close="rules-dialog">关闭</button></div><label for="rules">规则 JSON</label><textarea id="rules" spellcheck="false"></textarea><button id="save-rules" class="primary">保存规则</button><p id="rules-status" role="status"></p></dialog>
-<script src="/static/real.js?v=20261028"></script><script src="/static/app.js?v=20261028"></script>
+<dialog id="rules-dialog" aria-labelledby="rules-title"><div class="dialog-heading"><div><h2 id="rules-title">诊断规则</h2><p class="hint">独立维护电动机四类机理规则；各项等权，逐时刻匹配，所有历史共用最新频谱参考。阈值可编辑，来源文档变化需核对。</p></div><button data-close="rules-dialog">关闭</button></div><label for="rules">规则 JSON</label><textarea id="rules" spellcheck="false"></textarea><button id="save-rules" class="primary">保存规则</button><p id="rules-status" role="status"></p></dialog>
+<script src="/static/real.js?v=20261029reader3"></script><script src="/static/app.js?v=20261029reader3"></script>
 </body></html>

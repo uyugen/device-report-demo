@@ -5,7 +5,7 @@ import io
 import json
 import math
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import PurePosixPath
 from zipfile import BadZipFile, ZipFile
 
@@ -121,6 +121,9 @@ def parse_real(data):
     point = c.get('point', {})
     operating = c.get('operating_condition', {})
     d = {'id': device.get('device_id'), 'name': device.get('device_name'),
+         'device_code': device.get('device_code'),
+         'region_name': device.get('region_name') or device.get('location'),
+         'measure_point_name': point.get('measure_point_name'),
          'type': device.get('device_type'), 'model': device.get('model'),
          'location': device.get('location'), 'component': point.get('component_raw'),
          'point_id': point.get('local_point_id'), 'point_name': point.get('name_raw'),
@@ -132,7 +135,7 @@ def parse_real(data):
             'sampling_rate': None, 'sample_count': None, 'duration_seconds': None,
             'unit': None, 'history': [], 'waveform': None, 'current_features': {},
             'processing': {'input': '客户最终值及原始坐标，保留数值文本和来源行号',
-                           'signal': '不复算特征、不做FFT、不积分、不补算趋势增幅或能量比',
+                           'signal': '不复算特征、不做FFT、不积分；按配置计算规则比值及逐次条件满足情况',
                            'orders': '转速除以60获得参考频率，仅查找精确频率坐标，不提峰、不插值'}}
 
 
@@ -145,6 +148,10 @@ def check_real(s):
     for key in ['id', 'name', 'point_id', 'point_name']:
         if not isinstance(s['device'].get(key), str) or not s['device'][key].strip():
             raise ValueError('设备或测点必填字段缺失：' + key)
+    for key in ['device_code', 'region_name', 'measure_point_name']:
+        value = s['device'].get(key)
+        if value is not None and (not isinstance(value, str) or not value.strip() or len(value) > 300):
+            raise ValueError('台账字段须为非空文本且不超过300字符：' + key)
     rpm = finite(s['device']['rpm'], '转速', True)
     if rpm is not None and rpm < 0:
         raise ValueError('转速不能为负数')
@@ -239,7 +246,7 @@ def check_real(s):
         limitations.append('最新图谱的绝对采集时间未提供。')
     if c.get('current_features') is not None:
         raise ValueError('此版真实输入暂使用分数据集的历史特征；current_features请留null，避免未经确认的采集绑定')
-    limitations.append('历史末条特征未与最新图谱绑定；不合并为同一次当前采集。')
+    limitations.append('历史记录按用户指定共用最新频谱参考，不代表各历史时刻实测频谱。')
     install = c.get('device', {}).get('installation_date')
     if install:
         install_date = date(install).date()
@@ -248,9 +255,31 @@ def check_real(s):
     for kind in ['waveform','spectrum']:
         if not any(d['kind']==kind for d in s['datasets']):
             limitations.append('未提供' + ('波形' if kind=='waveform' else '频谱') + '，不补造对应图表或特征。')
-    return {'warnings': list(dict.fromkeys(warnings)), 'limitations': list(dict.fromkeys(limitations)),
+    return {'warnings': list(dict.fromkeys(warnings)), 'limitations': report_limitations(list(dict.fromkeys(limitations))),
             'checked': ['文件校验值', '设备测点关联', '单位', '坐标与时间顺序', '已提供的采样参数', '来源与图表对应'],
             'signal_recalculation': False}
+
+
+def acquisition_status(datasets):
+    """Record proportions, never elapsed-time proportions or a rule prerequisite."""
+    d = next((d for d in datasets if d.get('kind') == 'trend' and d.get('feature_code') == 'velocity_rms'), None)
+    result = {'threshold': '0.2', 'unit': 'mm/s', 'operator': 'gt',
+              'basis': 'record_count', 'note': '按速度有效值记录数统计，非运行时长占比；不作为机理规则前置条件。'}
+    if not d or not d.get('rows'):
+        return {**result, 'available': False, 'label': '未提供速度有效值，无法统计采集工况',
+                'total': 0, 'running_count': 0, 'stopped_count': 0}
+    if d['y_axis']['unit'] != 'mm/s':
+        raise ValueError('采集工况统计要求速度有效值单位为mm/s，不隐式换算')
+    rows = d['rows']
+    running = sum(Decimal(r['y']) > Decimal('0.2') for r in rows)
+    pct = (Decimal(running) * 100 / len(rows)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    stopped_pct = Decimal('100.00') - pct
+    return {**result, 'available': True, 'total': len(rows), 'running_count': running,
+            'stopped_count': len(rows)-running, 'running_percent': str(pct),
+            'stopped_percent': str(stopped_pct), 'label': f'{pct}%运行＋{stopped_pct}%停机',
+            'dataset_id': d['dataset_id'], 'file': d['data_file'], 'source_id': d['source_id'],
+            'running_source_rows': [r['source_row'] for r in rows if Decimal(r['y']) > Decimal('0.2')],
+            'stopped_source_rows': [r['source_row'] for r in rows if Decimal(r['y']) <= Decimal('0.2')]}
 
 
 def prepare_real(s):
@@ -295,9 +324,10 @@ def prepare_real(s):
             'missing':q['limitations'], 'warnings':q['warnings'], 'rpm_available':bool(s['device']['rpm']),
             'peaks':[], 'frequency':[], 'amplitude':[], 'series':series, 'order_coordinates':orders,
             'evidence_items':evidence, 'chart_manifest':chart_manifest,
+            'acquisition_status': acquisition_status(s['datasets']),
             'signal_recalculation':False, 'history_linked_to_latest':False,
             'spectrum_provided':spectrum is not None,
-            'summary':'客户提供的历史特征与最新图谱分别展示，当前故障类型未定位，严重程度未分级。'}
+            'summary':'已按全部历史记录逐次匹配设备机理规则，具体结果见综合判定。'}
 
 
 def real_decision(s, a, rules):
@@ -321,13 +351,45 @@ def real_facts(s, a, decision):
                             'raw_waveform_array_omitted_from_prompt':True,
                             'note':'波形及频谱坐标由程序绘图，未向模型发送图片或全量坐标；不能声称目视观察到周期波形或冲击。'},
             'operating_condition':s['case_manifest'].get('operating_condition'),
+            'acquisition_status':a.get('acquisition_status'),
             'latest_acquisition':s['case_manifest'].get('latest_acquisition'),
-            'historical_features':a['series'], 'order_coordinate_lookups':a['order_coordinates'],
-            'evidence_items':a['evidence_items'], 'decision':decision, 'missing':a['missing'],
+            'historical_features':[{k:v for k,v in x.items() if k not in ['first','last']} for x in a['series']],
+            'order_coordinate_lookups':a['order_coordinates'],
+            'evidence_items':[x for x in a['evidence_items'] if x.get('scope')!='history'],
+            **({'report_spec':writer_report_spec(a['report_plan'])} if 'report_plan' in a else {}),
+            'decision':model_decision(decision), 'missing':report_limitations(a['missing']),
             'data_warnings':a['warnings'], 'processing':s['processing'],
             'history_linked_to_latest':False,
-            'metric_definition_status':{'kurtosis':'尚未确认是否为加速度峭度',
-                                        'velocity_rms':'尚未确认通频带宽与机理条件的口径',
-                                        'low_frequency_impulse':'指标算法与阈值单位尚待确认'},
-            'input_scope':'提供每个历史指标的首末原值、记录数及来源，不发送全部历史点或图像；只比较已给首末值，不声称持续上升、波动形态或图像形态。',
+            'metric_definition_status':{'kurtosis':'按用户确认，加速度峭度即输入峭度',
+                                        'velocity_rms':'按用户确认，通频速度有效值即速度有效值',
+                                        'order_amplitude':'频谱对应横坐标的纵坐标，按业务规则求和及相除'},
+            'input_scope':'全部历史记录已由程序逐次匹配。提供规则条件、每条件次数统计、最近及最高满足率的完整记录和来源；逐次明细另存CSV，不将首末变化作为故障依据；未发送图像。',
             'spectrum_scope':'倍频表仅列选定频率的原始坐标，不是峰值清单，不能证明全频段主峰。'}
+
+
+def writer_report_spec(plan):
+    # Lossless references to decision.rules avoid copying the same statistics
+    # once per chart. Full knowledge and all condition statistics remain present.
+    return {'version':plan['version'],'conclusion':plan['conclusion'],
+            'directions':[{k:v for k,v in d.items() if k not in ['conditions','condition_summary']} for d in plan['directions']],
+            'charts':[{'dataset_id':c['dataset_id'],'kind':c['kind'],'title':c['title'],
+                       'related_rules':[{'rule_id':r['rule_id'],'fault':r['fault'],'knowledge_id':r['knowledge_id'],
+                                         'conditions':[{'id':x['id'],'name':x['name']} for x in r['conditions']]}
+                                        for r in c['related_rules']]} for c in plan['charts']]}
+
+
+def report_limitations(items):
+    # Existing manifests may list optional fields as missing; not rule blockers.
+    excluded=['负载','运行状态','峭度','低频冲击','算法口径','指标定义','分级','幅值口径','带宽','测点编码','方向','工况','历史末条','最新记录与波形']
+    return [x for x in items if not any(term in x for term in excluded)]
+
+
+def model_decision(decision):
+    result={k:v for k,v in decision.items() if k!='rules'}
+    result['rules']=[]
+    for r in decision['rules']:
+        item={k:v for k,v in r.items() if k not in ['records','latest_assessment','best','source_rule_text','latest_reference']}
+        if r.get('best'):
+            item['historical_best']=r['best'] if r['best']!=r.get('latest') else '与最近记录相同'
+        result['rules'].append(item)
+    return result
