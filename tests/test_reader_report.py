@@ -15,7 +15,7 @@ def sample():
     plan=build_report_plan(s,a,d,r);a['report_plan']=plan
     facts=real_facts(s,a,d)
     refs=[x['id'] for x in k]
-    text={'mechanism':'现有资料提示需要关注相关电机部件。','assessment':'应结合相关特征和现场检查进一步区分故障方向。',
+    text={'mechanism':'最近记录未完整触发故障机理，历史故障结果单独说明。','assessment':'本次机理规则判定为正常；历史记录曾触发故障机理，应分别记录并关注复发情况。',
           'limitations':'历史判断共用最新频谱作为参考。','action1':'建议检查对应部件并记录现场情况。',
           'action2':'建议保留处置记录并安排复测。','citations':refs,'hypotheses':[],
           'chart_explanations':fallback_chart_explanations(plan)}
@@ -26,7 +26,7 @@ def test_relevant_charts_include_unsatisfied_conditions_and_history():
     s,a,r,k,d,plan,facts,text=sample()
     # Bearing only matched in a middle period: still relevant, never asserted as current.
     bearing=next(x for x in plan['directions'] if x['rule_id']==r[0]['id'])
-    assert bearing['historical_only'] and '历史记录提示' in plan['conclusion']
+    assert bearing['historical_only'] and '历史记录曾判定' in plan['conclusion']
     assert any(x['dataset_id']=='acceleration_peak' for x in plan['charts'])
     assert all(x['chart_type']=='line' and x['related_rules'] for x in plan['charts'])
     assert '2/4' not in plan['conclusion'] and '大概率' not in plan['conclusion']
@@ -36,10 +36,12 @@ def test_relevant_charts_include_unsatisfied_conditions_and_history():
 def test_weak_rules_do_not_fill_report_with_unrelated_charts():
     s,a,r,k,d,plan,facts,text=sample()
     for rule in d['rules']:
-        for key in ['latest_assessment','best']:rule[key]['match_rate']=.25
+        for key in ['latest_assessment','best']:
+            rule[key].update(match_rate=.75,all_conditions_met=False)
+    d['overall_status']='正常'
     plan=build_report_plan(s,a,d,r)
     assert plan['charts']==[] and plan['directions']==[]
-    assert '不足以' in plan['conclusion']
+    assert '正常' in plan['conclusion']
 
 
 def test_prompt_includes_all_knowledge_without_endpoint_evidence():

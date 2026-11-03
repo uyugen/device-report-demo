@@ -12,13 +12,14 @@ from .real_data import date, UNITS
 
 
 PROFILE = 'mechanism_matching_v2'
+MATCHING_MODE = 'all_conditions_required_v1'
 POLICY = {
     'aliases': {'加速度峭度':'峭度', '通频速度有效值':'速度有效值'},
     'orders': 'x倍频频率=转速/60×x；幅值或业务用语能量=频谱该横坐标的纵坐标；能量和按纵坐标相加。',
     'ratio': '按用户确认的输入数值口径计算，不做单位换算，不将结果称为无量纲物理能量比。',
     'matching': '历史指标按相同时间逐条对齐；缺值不补齐，不跨时刻拼接条件，不要求运行状态或负载。',
     'scope': '当前配置覆盖机理文档电动机的四类故障；其他设备需在独立入口配置对应条件。',
-    'grading': '各条件等权；满足数/规则总条件数为满足率，未知仍计入总数；不是故障概率或严重程度。',
+    'grading': '同一时刻全部条件满足才判为对应故障；任一条件明确不满足则该规则判为正常；无不满足但有未知时无法判定。满足率仅保留为核查计数，不再用于分档、概率或严重程度。',
     'spectrum': '按用户指定，所有历史时刻共用最新频谱的倍频坐标作为规则参考；不代表各历史时刻实测频谱。',
 }
 
@@ -28,13 +29,18 @@ def timestamp(value):
     return t.astimezone(timezone.utc).isoformat() if t.tzinfo else t.isoformat()
 
 
-def support(matched, total):
-    rate = matched / total
-    if rate == 0:return '未获得规则支持'
-    if rate < .5:return '支持较弱'
-    if rate < .75:return '部分符合'
-    if rate < 1:return '疑似，建议优先排查'
-    return '高度疑似（规则全部符合）'
+def support(matched, total, failed=None, unknown=0):
+    failed=total-matched-unknown if failed is None else failed
+    if total and matched==total:return '故障'
+    if failed>0:return '正常'
+    return '无法判定'
+
+
+def combine_outcomes(outcomes, blocked=False):
+    """OR across fault rules; a failed rule does not cancel another matched rule."""
+    if '故障' in outcomes:return '故障'
+    if blocked or not outcomes or '无法判定' in outcomes:return '无法判定'
+    return '正常'
 
 
 def validate_mechanism(rule):
@@ -75,8 +81,8 @@ def summarize(conditions):
     m,f,u=counts['满足'],counts['不满足'],counts['无法判定']
     n=len(conditions)
     return {'matched':m,'failed':f,'unknown':u,'total':n,
-            'match_rate':m/n,'coverage':(m+f)/n,'support':support(m,n),
-            'complete':u==0,'all_conditions_met':m==n}
+            'match_rate':m/n if n else 0,'coverage':(m+f)/n if n else 0,'support':support(m,n,f,u),
+            'complete':bool(n and u==0),'all_conditions_met':bool(n and m==n)}
 
 
 def run_condition(c, values, orders):
@@ -186,15 +192,24 @@ def match_rules(s,a,rules,knowledge):
                   key=lambda r:r['latest_assessment']['match_rate'],reverse=True)
     candidates=[{'rule_id':r['id'],'fault':r['fault'],'knowledge_id':r['knowledge_id'],
                  **{k:r['latest_assessment'][k] for k in ['scope','time','matched','failed','unknown','total','match_rate','support']}}
-                for r in ranked if r['latest_assessment']['matched']>0]
+                for r in ranked if r['latest_assessment']['all_conditions_met']]
     historical_candidates=[{'rule_id':r['id'],'fault':r['fault'],'knowledge_id':r['knowledge_id'],
                             **{k:r['best'][k] for k in ['time','matched','failed','unknown','total','match_rate','support']}}
-                           for r in active if r['best'] and r['best']['matched']>0]
-    state=('；'.join(f'{r["fault"]}：{r["matched"]}/{r["total"]}项，{r["support"]}' for r in candidates)
-           if candidates else '当前已执行机理规则未获得支持，不能据此证明无其他故障' if active else '没有可执行的对应设备机理规则')
-    return {'profile':PROFILE,'policy':POLICY,'diagnostic_category':category,'category_origin':category_origin,
+                           for r in active if r['best'] and r['best']['all_conditions_met']]
+    blocked=any(r['status'] not in ['禁用','设备类别不适用','不适用'] and 'records' not in r for r in results)
+    overall=combine_outcomes([r['latest_assessment']['support'] for r in active if r['latest_assessment']],blocked)
+    state=('判定故障：'+'、'.join(r['fault'] for r in candidates)+'。' if overall=='故障' else
+           '当前设备状态正常（本次机理规则判定范围内）。' if overall=='正常' else '当前设备状态无法判定，请核查缺失数据或规则配置。')
+    outcomes_by_time={}
+    for rule in active:
+        for row in rule['records']:outcomes_by_time.setdefault(row['time'],[]).append(row['support'])
+    history_outcomes=[{'time':t,'status':combine_outcomes(outcomes,blocked)} for t,outcomes in sorted(outcomes_by_time.items())]
+    history_counts=dict(Counter(x['status'] for x in history_outcomes))
+    return {'profile':PROFILE,'matching_mode':MATCHING_MODE,'policy':POLICY,'diagnostic_category':category,'category_origin':category_origin,
             'rules':results,'candidates':candidates,'historical_candidates':historical_candidates,
-            'state':state,'fault':'、'.join(c['fault'] for c in candidates) or '未定位',
+            'state':state,'overall_status':overall,'historical_status_counts':history_counts,
+            'historical_status_records':history_outcomes,
+            'fault':'、'.join(c['fault'] for c in candidates) or ('无对应故障' if overall=='正常' else '无法判定'),
             'severity':'未分级','requires_review':True,'origin':'configured_mechanism_conditions',
             'historical_time_count':len(rows),'input_record_counts':data_rows,
             'change_percent':None,'first':None,'last':None,'trend_count':len(rows),
@@ -208,10 +223,10 @@ def write_matches_csv(decision,path):
         return "'"+text if text.startswith(('=','+','-','@','\t','\r')) else text
     with path.open('w',encoding='utf-8-sig',newline='') as f:
         writer=csv.writer(f)
-        writer.writerow(['规则编号','故障','范围','时间','满足数','不满足数','未知数','总条件数','条件编号','条件','结果','原值或比值','表达式','数据来源','备注'])
+        writer.writerow(['规则编号','故障','范围','时间','满足数','不满足数','未知数','总条件数','条件编号','条件','结果','原值或比值','表达式','数据来源','备注','该规则判定'])
         for r in decision['rules']:
             for row in r.get('records',[])+([r['latest_reference']] if r.get('latest_reference') else []):
                 for c in row['conditions']:
                     writer.writerow([safe(v) for v in [r['id'],r['fault'],row['scope'],row['time'],
                         row['matched'],row['failed'],row['unknown'],row['total'],c['id'],c['name'],c['status'],
-                        c['value'],c['expression'],json.dumps(c['sources'],ensure_ascii=False),c['reason'] or row.get('note','')]])
+                        c['value'],c['expression'],json.dumps(c['sources'],ensure_ascii=False),c['reason'] or row.get('note',''),row['support']]])

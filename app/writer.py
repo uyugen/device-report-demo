@@ -54,15 +54,15 @@ missing_evidence为缺少条件的简短中文字符串数组，不含数字；k
 MATCHING_PROMPT = '''你根据程序已经完成的机理规则匹配结果，为设备状态报告撰写解释与建议。
 facts.decision是确定性结果。全部相关历史记录均已按相同时间对齐后逐项匹配，不只比较首末值。
 每条规则提供条件定义、各条件满足/不满足/未知的次数、最近记录与最高满足率记录及原始来源。
-四个条件构成四项独立检查，区间上下界属于同一条件。各项等权，满足率=满足项数/全部条件数；未知不视为满足。
-满足率和历史满足次数不等于故障发生概率，不得编造概率；支持等级不是严重程度。最近结果和历史最高结果不得混为一谈。
+同一时刻同一规则的全部条件满足才判为对应故障；只要存在明确不满足项，该规则判为正常；没有不满足但存在未知项时无法判定。区间上下界属于同一条件。
+不同故障规则分别判定，任一规则命中故障即可判为对应故障，不能用另一条正常规则抵消。满足率仅供核查，不再用于支持等级、概率或严重程度。最近结果和历史结果分别说明。
 描述最近结果时必须明确写“最近记录”；历史最高匹配另行说明，不能把最近的条件结果扩展成全部历史结果。
 运行状态、运行方向、负载和工况不属于本次规则前置条件，不得以缺少它们为由否定或阻断匹配。
 按用户确认，加速度峭度即输入峭度，通频速度有效值即速度有效值；不要再将名称口径写成缺失。
 转频=转速/六十，倍频位置是频率；幅值或本业务中的“能量”是该频率横坐标对应的纵坐标，能量和直接按纵坐标相加。
 频谱幅值与速度有效值按用户约定的输入数值计算业务比值，不做换算，不称为无量纲物理能量比。
 所有历史时刻按用户指定共用同一份最新频谱。必须区分共用参考与逐时刻实测频谱，不能宣称历史频谱也发生变化。
-故障名称、支持等级和条件匹配以程序为准；不得自行增加故障、修改阈值、重算数值、将部分符合改写为已确诊或设备正常。
+正常、故障或无法判定以程序overall_status为准；不得自行增加故障、修改阈值、重算数值。正常报告明确说明本次规则判定正常，给出日常点检和监测建议；不得无依据声称健康状态良好、温度转速稳定或波形未见异常。
 模型未接收图像或完整曲线，不得声称目视观察到冲击、周期波形或持续上升。首末值仅作索引，不作为故障归因依据。
 knowledge为全部知识条目。只引用支持已执行规则解释或建议的条目；未配置规则不得自动执行，典型现象不能当成本次实测。
 返回严格JSON，必须且只能有mechanism、limitations、action1、action2、citations、hypotheses六个字段。
@@ -79,7 +79,7 @@ def system_prompt(facts):
     return PROMPT+(REAL_INSTRUCTIONS if facts.get('mode')=='real_measurement' else '')
 
 
-def validate_narrative(data, refs):
+def validate_narrative(data, refs, allow_normal=False):
     required = ['mechanism', 'limitations', 'action1', 'action2', 'citations']
     if not isinstance(data,dict) or set(data) != set(required):
         raise ValueError('大模型返回字段不符合约定')
@@ -90,6 +90,7 @@ def validate_narrative(data, refs):
         if re.search(r'\d', value):
             raise ValueError('模型不得新增或复述数字，数值由系统填入')
         for term in ['已确诊','确定为','立即停机','必须更换','已经损坏','已发生轴承故障','设备正常','设备健康']:
+            if allow_normal and term=='设备正常':continue
             for match in re.finditer(re.escape(term),value):
                 prefix = value[max(0,match.start()-22):match.start()]
                 if not re.search(r'(不能|无法|不可|不应|不足以|不得|尚未|未能|不代表|不支持|不建议|不宜)[^，。；！？]{0,16}$',prefix):
@@ -142,7 +143,9 @@ def validate_real_narrative(data, refs, facts):
     if not isinstance(data,dict) or 'hypotheses' not in data:
         raise ValueError('真实数据写作须返回hypotheses数组')
     hypotheses=data['hypotheses']
-    base=validate_evidence_claims(validate_narrative({k:v for k,v in data.items() if k!='hypotheses'},refs),facts)
+    allow_normal=(facts.get('decision',{}).get('matching_mode')=='all_conditions_required_v1'
+                  and facts['decision'].get('overall_status')=='正常')
+    base=validate_evidence_claims(validate_narrative({k:v for k,v in data.items() if k!='hypotheses'},refs,allow_normal),facts)
     if facts.get('decision',{}).get('profile')=='mechanism_matching_v2':
         if hypotheses!=[]:raise ValueError('故障方向由规则程序生成，模型不得另行诊断')
         text='；'.join(base[k] for k in ['mechanism','limitations','action1','action2'])
@@ -189,6 +192,20 @@ def validate_reader_narrative(data, refs, facts):
             raise ValueError('正式报告禁止出现“'+banned.group()+'”，请改为面向读者的解释且不提高结论确定程度')
     for key in ['mechanism','assessment','action1','action2']:
         check_prose(data[key])
+    strict=facts.get('decision',{}).get('matching_mode')=='all_conditions_required_v1'
+    if strict:
+        status=facts['decision']['overall_status']
+        visible='；'.join(data[k] for k in ['mechanism','assessment','action1','action2'])
+        if re.search(r'健康状态良好|指标稳定|温度稳定|转速稳定|正常浮动|正常波动|未见异常冲击|未见.*调制|波形未见异常',visible):
+            raise ValueError('不得套用正常报告示例中的稳定性、健康状态或图像观察结论')
+        if status=='正常' and not re.search(r'正常',data['assessment']):
+            raise ValueError('全部已执行规则正常时，综合判定须按本次机理规则明确写正常')
+        if status=='正常' and not facts['report_spec']['directions'] and re.search(r'疑似|可能.*故障|优先排查|动平衡|拆检|更换',visible):
+            raise ValueError('未命中故障规则时不得延续部分符合的故障猜测或故障检修建议')
+        if status=='故障' and ('故障' not in data['assessment'] or re.search(r'当前.{0,8}正常|本次.{0,12}正常',data['assessment'])):
+            raise ValueError('已有规则全部满足时，综合判定须明确对应故障，不得报告当前正常')
+        if status=='无法判定' and not re.search(r'无法判定|不能判定|尚不能判断',data['assessment']):
+            raise ValueError('缺失或规则阻断导致无法判定时，不得报告正常')
     charts={ch['dataset_id']:ch for ch in facts['report_spec']['charts']}
     explanations=data['chart_explanations']
     if not isinstance(explanations,list) or len(explanations)!=len(charts):
@@ -231,9 +248,10 @@ def write_report(facts, knowledge, use_llm):
                         limitations='绝对采集时间、工况及部分指标口径尚待核实；频谱坐标与历史特征不能直接组合套用幅值比条件。',
                         hypotheses=[])
     if facts.get('decision',{}).get('profile')=='mechanism_matching_v2':
-        fallback.update(mechanism='已按全部历史记录逐次匹配对应设备的机理规则。故障支持程度以各次条件满足数为依据，详细结果见机理匹配表，不以首末变化推断故障。',
-                        limitations='所有历史时刻共用用户指定的最新频谱参考，不代表各历史时刻的实测频谱；规则满足率不等于故障概率，也不代表严重程度。',
-                        action1='优先复核支持程度较高的机理方向，对照条件记录及来源检查对应部件。',
+        status=facts['decision'].get('overall_status','无法判定')
+        fallback.update(mechanism=('本次机理规则判定设备状态正常，最近记录未出现对应故障的全部条件同时满足。' if status=='正常' else '最近记录已满足对应故障机理的全部条件，按本次机理规则判定存在对应故障。' if status=='故障' else '部分数据或规则配置未完成核查，当前设备状态无法判定。'),
+                        limitations='所有历史时刻共用用户指定的最新频谱参考，不代表各历史时刻的实测频谱；本次判定限于已配置机理规则范围。',
+                        action1=('按日常点检计划检查设备，保留监测与维护记录。' if status=='正常' else '对照故障条件记录及来源检查对应部件；无法判定项先核查输入和配置。'),
                         action2='按机理条目的措施安排检查并记录处置结果；缺值或分母为零的条件单独核对，不补造数据。',
                         citations=list(dict.fromkeys(r['knowledge_id'] for r in facts['decision']['rules'] if r.get('knowledge_id') in refs)))
     if facts.get('report_spec',{}).get('version')=='reader_report_v3':
@@ -245,9 +263,28 @@ def write_report(facts, knowledge, use_llm):
                         action2='根据现场复核结果安排检修，保留处置记录，并对相关振动特征进行复测比较。',
                         chart_explanations=fallback_chart_explanations(plan),
                         citations=list(dict.fromkeys(d['knowledge_id'] for d in plan['directions'])))
+        if plan.get('matching_mode')=='all_conditions_required_v1':
+            status=plan['overall_status']
+            if status=='正常':
+                fallback.update(mechanism='当前各项已执行的故障机理均未完整触发，按本次机理规则判定设备状态正常。建议保持例行监测，继续记录相关振动指标。',
+                                assessment='本次机理规则判定为正常，未发现全部条件同时满足的当前故障。后续按日常维护计划检查设备并保留监测记录。',
+                                action1='按日常点检计划检查测点固定、连接紧固与润滑状况，记录现场异响和可见异常。',
+                                action2='保持例行监测，保存采集与维护记录；如后续出现异常现象，及时复测并重新进行机理判定。')
+                if plan['directions']:
+                    fallback['mechanism']+='历史记录曾有故障判定，需关注复发情况。'
+                    fallback['assessment']+='历史故障与最近正常结果分别记录。'
+            elif status=='故障':
+                fallback.update(mechanism='最近记录已满足对应故障机理的全部条件，按本次机理规则判定存在相应故障，应安排对应部件检查。',
+                                assessment='本次判定存在对应故障。请结合已命中的机理及现场检查安排维护，检修后复测并重新核对全部条件。')
+            else:
+                fallback.update(mechanism='现有资料或规则配置存在未完成的判断项，当前状态无法判定，请先核查相关数据和配置。',
+                                assessment='当前状态无法判定。请核查缺失数据、无效比值及未执行的适用规则，补齐依据后重新判定。',
+                                action1='核查无法判定的条件及其对应输入，确认所需指标和频谱坐标是否提供。',
+                                action2='修正数据或配置后重新生成报告，保留本次核查与补充记录。')
+            fallback['citations']=list(dict.fromkeys(r['knowledge_id'] for r in facts['decision']['rules'] if r.get('knowledge_id') in refs))
     info={'context':budget,'facts_fields':list(facts)}
     if not use_llm:
-        return fallback, {**info,'mode':'template','message':'使用固定说明模板，未调用大模型；故障方向、支持等级及知识引用由规则程序生成' if facts.get('decision',{}).get('profile')=='mechanism_matching_v2' else '使用固定说明模板，未调用大模型；模板未引用特定机理条目'}
+        return fallback, {**info,'mode':'template','message':'使用固定说明模板，未调用大模型；机理判定及知识引用由规则程序生成' if facts.get('decision',{}).get('profile')=='mechanism_matching_v2' else '使用固定说明模板，未调用大模型；模板未引用特定机理条目'}
     if os.getenv('LLM_ENABLED','false').lower() != 'true' or not os.getenv('MODEL_API_KEY'):
         return fallback, {**info,'mode':'template','message':'尚未启用模型配置，已使用固定说明模板'}
     candidate=None

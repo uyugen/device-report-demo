@@ -106,7 +106,7 @@ def test_rule_config_can_be_edited_but_not_execute_code():
     with pytest.raises(ValueError):validate_rules(r)
 
 
-@pytest.mark.parametrize('count,label',[(0,'未获得规则支持'),(1,'支持较弱'),(2,'部分符合'),(3,'疑似，建议优先排查'),(4,'高度疑似（规则全部符合）')])
+@pytest.mark.parametrize('count,label',[(0,'正常'),(1,'正常'),(2,'正常'),(3,'正常'),(4,'故障')])
 def test_support_labels_are_not_probabilities(count,label):
     assert support(count,4)==label
 

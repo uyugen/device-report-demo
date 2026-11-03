@@ -370,7 +370,9 @@ def real_facts(s, a, decision):
 def writer_report_spec(plan):
     # Lossless references to decision.rules avoid copying the same statistics
     # once per chart. Full knowledge and all condition statistics remain present.
-    return {'version':plan['version'],'conclusion':plan['conclusion'],
+    return {'version':plan['version'],'matching_mode':plan.get('matching_mode'),
+            'overall_status':plan.get('overall_status'),'historical_status_counts':plan.get('historical_status_counts',{}),
+            'conclusion':plan['conclusion'],
             'directions':[{k:v for k,v in d.items() if k not in ['conditions','condition_summary']} for d in plan['directions']],
             'charts':[{'dataset_id':c['dataset_id'],'kind':c['kind'],'title':c['title'],
                        'related_rules':[{'rule_id':r['rule_id'],'fault':r['fault'],'knowledge_id':r['knowledge_id'],
@@ -385,7 +387,7 @@ def report_limitations(items):
 
 
 def model_decision(decision):
-    result={k:v for k,v in decision.items() if k!='rules'}
+    result={k:v for k,v in decision.items() if k not in ['rules','historical_status_records']}
     result['rules']=[]
     for r in decision['rules']:
         item={k:v for k,v in r.items() if k not in ['records','latest_assessment','best','source_rule_text','latest_reference']}

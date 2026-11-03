@@ -11,7 +11,7 @@ function mechanismRuleRows(decision,base) {
     const current=r.latest_assessment;
     const summary=`<div class="table-scroll"><table><thead><tr><th>条件</th><th>满足次数</th><th>不满足</th><th>未知</th></tr></thead><tbody>${r.condition_summary.map(c=>`<tr><td>${esc(c.name)}</td><td class="numeric">${c.matched}/${c.total}</td><td class="numeric">${c.failed}</td><td class="numeric">${c.unknown}</td></tr>`).join('')}</tbody></table></div>`;
     const best=r.best;
-    return `<div class="rule-row"><strong>${esc(r.fault)}</strong> <span class="tag tag-warning">${esc(r.status)}</span><p>${esc(r.detail)}</p><p class="citation">${esc(r.knowledge_id)} · ${esc(r.source)}</p>${summary}
+    return `<div class="rule-row"><strong>${esc(r.fault)}</strong> <span class="tag ${r.status==='正常'?'tag-success':'tag-warning'}">${esc(r.status)}</span><p>${esc(r.detail)}</p><p class="citation">${esc(r.knowledge_id)} · ${esc(r.source)}</p>${summary}
       ${current?`<details class="accordion"><summary>最近记录 ${esc(current.time)} · ${esc(rowLabel(current))}</summary><div class="accordion-body">${conditions(current)}</div></details>`:''}
       ${best?`<details class="accordion"><summary>历史最高匹配 ${esc(best.time)} · ${esc(rowLabel(best))}</summary><div class="accordion-body">${conditions(best)}</div></details>`:''}
       <details class="accordion"><summary>全部 ${r.records.length} 次匹配记录</summary><div class="accordion-body"><p class="caption">点击各时刻查看条件数值和来源。最近匹配与历史最高匹配分别报告。</p>${r.records.map(row=>`<details><summary>${esc(row.time)} · ${esc(rowLabel(row))}</summary>${conditions(row)}</details>`).join('')}</div></details></div>`;

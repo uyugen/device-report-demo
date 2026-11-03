@@ -2,7 +2,6 @@
 from copy import deepcopy
 
 VERSION = 'reader_report_v3'
-MIN_REPORT_SUPPORT = .5
 
 
 def build_report_plan(snapshot, analysis, decision, configured_rules):
@@ -10,32 +9,25 @@ def build_report_plan(snapshot, analysis, decision, configured_rules):
     directions = []
     for rule in decision['rules']:
         latest, best = rule.get('latest_assessment'), rule.get('best')
-        if not latest or not best or max(latest['match_rate'], best['match_rate']) < MIN_REPORT_SUPPORT:
+        if not latest or not best or not (latest['all_conditions_met'] or best['all_conditions_met']):
             continue
         directions.append({
             'rule_id': rule['id'], 'fault': rule['fault'], 'knowledge_id': rule['knowledge_id'],
             'latest_rate': latest['match_rate'], 'historical_best_rate': best['match_rate'],
-            'historical_only': latest['match_rate'] < MIN_REPORT_SUPPORT,
-            'priority': best['match_rate'] >= .75,
+            'historical_only': not latest['all_conditions_met'],
+            'priority': latest['all_conditions_met'],
             'conditions': definitions[rule['id']]['conditions'],
             'condition_summary': rule['condition_summary'],
         })
     directions.sort(key=lambda d: (-d['historical_best_rate'], -d['latest_rate'], d['rule_id']))
     current = [d for d in directions if not d['historical_only']]
     historical = [d for d in directions if d['historical_only']]
-    phrases = []
-    for d in current:
-        prefix = '高度疑似' if d['latest_rate'] == 1 else '疑似' if d['latest_rate'] >= .75 else '存在'
-        phrases.append(prefix + d['fault'] + ('的可能' if prefix == '存在' else ''))
-    if phrases:
-        conclusion = '；'.join(phrases) + '，建议现场复核。'
-    else:
-        conclusion = '最近记录尚不足以形成明确故障判断。'
+    overall=decision.get('overall_status','无法判定')
+    conclusion=('当前设备状态正常（本次机理规则判定范围内）。' if overall=='正常' else
+                '判定故障：'+'、'.join(d['fault'] for d in current)+'，建议安排现场检查与处理。' if overall=='故障' else
+                '当前设备状态无法判定，请核查缺失数据或规则配置。')
     if historical:
-        conclusion += '历史记录提示' + '、'.join(d['fault'] for d in historical) + '的可能，需关注复发情况。'
-    priority = [d['fault'] for d in directions if d['priority']]
-    if priority:
-        conclusion += '历史记录中' + '、'.join(priority) + '的支持程度较高，建议优先排查。'
+        conclusion += '历史记录曾判定' + '、'.join(d['fault'] for d in historical) + '，需关注复发情况。'
     related_codes, need_spectrum = set(), False
     for d in directions:
         for c in d['conditions']:
@@ -69,10 +61,12 @@ def build_report_plan(snapshot, analysis, decision, configured_rules):
                 related.append({'rule_id': d['rule_id'], 'fault': d['fault'],
                                 'knowledge_id': d['knowledge_id'], 'conditions': conditions})
         selected.append({**chart, 'chart_type': 'line', 'related_rules': related})
-    return {'version': VERSION, 'conclusion': conclusion, 'directions': directions,
+    return {'version': VERSION, 'matching_mode':decision.get('matching_mode'),
+            'overall_status':overall,'historical_status_counts':decision.get('historical_status_counts',{}),
+            'conclusion': conclusion, 'directions': directions,
             'charts': selected, 'available_chart_count': len(available),
-            'selection_policy': '最近或历史最高规则满足率至少二分之一；展示涉及的全部条件指标，含未满足条件。'
-                                '弱支持方向不单独配图，缺少对应输入不补图。此阈值仅控制报告展示，不是诊断阈值。',
+            'selection_policy': '仅为最近或历史某一时刻全部条件满足的故障方向配图；部分满足不作为故障方向，不单独配图。'
+                                '无故障命中时生成正常或无法判定的文字报告，缺少输入不补图。',
             'line_policy': '按原始时间或坐标连接相邻实测点；不插值，不将采集间隔解释为连续实测。'}
 
 
