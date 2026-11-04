@@ -61,7 +61,7 @@ async function init() {
     const config = await request('/api/config');
     contextLimit = config.context_limit;
     $('llm').checked = false;
-    $('model-note').textContent = config.model_enabled ? `可选模型 ${config.model_name}（${config.model_host}）。勾选后将向此接口发送整理后的实测依据与知识条目；默认使用固定说明。` : '未配置模型，将使用固定文字模板。';
+    $('model-note').textContent = config.model_enabled ? (config.model_local ? `本地模型 ${config.model_name}。勾选后由学校服务器内的模型撰写说明与建议；默认使用固定说明。` : `可选模型 ${config.model_name}（${config.model_host}）。勾选后将向此接口发送整理后的实测依据与知识条目；默认使用固定说明。`) : '未配置模型，将使用固定文字模板。';
     $('rules').value = JSON.stringify(await request('/api/rules'), null, 2);
     await updateKnowledge();
     const id = new URLSearchParams(location.search).get('report');

@@ -296,9 +296,13 @@ def write_report(facts, knowledge, use_llm):
                  'messages':[{'role':'system','content':system_prompt(facts)},{'role':'user','content':content}]}
         if urlsplit(base).hostname=='api.deepseek.com':
             payload['thinking']={'type':'disabled'}
+        elif os.getenv('MODEL_API_STYLE') in {'qwen','llama_cpp'}:
+            payload['chat_template_kwargs']={'enable_thinking':False}
+        timeout=float(os.getenv('MODEL_TIMEOUT_SECONDS','100'))
+        if not 10<=timeout<=3600:raise ValueError('模型超时须在十秒至一小时之间')
         reader=facts.get('report_spec',{}).get('version')=='reader_report_v3'
         for attempt in range(2 if reader else 1):
-            with httpx.Client(timeout=100) as client:
+            with httpx.Client(timeout=timeout,trust_env=urlsplit(base).hostname not in {'localhost','127.0.0.1','::1'}) as client:
                 r = client.post(base+'/chat/completions',headers={'Authorization':'Bearer '+os.environ['MODEL_API_KEY']},
                     json=payload)
                 r.raise_for_status()
@@ -327,6 +331,7 @@ def write_report(facts, knowledge, use_llm):
                 if retry_upper+budget['output_reserved_tokens']>budget['context_limit']:
                     raise ValueError('重写请求超过完整上下文预算，未截断知识，未再次调用模型')
         return data, {**info,'mode':'llm','model':os.environ.get('MODEL_NAME'),
+            'deployment':'local' if urlsplit(base).hostname in {'localhost','127.0.0.1','::1'} else 'remote',
             'message':'大模型已使用全部记录的规则统计及代表记录、来源和全部知识；故障方向由程序匹配，模型仅撰写说明与建议' if facts.get('decision',{}).get('profile')=='mechanism_matching_v2' else '大模型已使用完整分析资料与全部知识条目；通过结构、数字和引用检查，专业解释仍需人工审核'}
     except Exception as e:
         if candidate is not None:

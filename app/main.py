@@ -37,6 +37,7 @@ def index():return FileResponse(ROOT/'app/static/index.html')
 def config():return {'samples':[], 'input_profile':'real_measurement_v1.1',
     'model_enabled':os.getenv('LLM_ENABLED','false').lower()=='true' and bool(os.getenv('MODEL_API_KEY')),
     'model_name':os.getenv('MODEL_NAME','未配置'), 'model_host':urlsplit(os.getenv('MODEL_BASE_URL','')).hostname,
+    'model_local':urlsplit(os.getenv('MODEL_BASE_URL','')).hostname in {'localhost','127.0.0.1','::1'},
     'context_limit':int(os.getenv('MODEL_CONTEXT_TOKENS','65536'))}
 @app.get('/api/health')
 def health():return {'status':'ok','project':'device-report-demo'}

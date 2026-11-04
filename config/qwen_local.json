@@ -1,0 +1,11 @@
+{
+  "runtime_root": "/data1/tjb/qwen-local",
+  "binary": "runtime/llama.cpp-b12065/build-cpu/bin/llama-server",
+  "model_file": "models/Qwen3.5-9B-Q4_K_M.gguf",
+  "model_name": "Qwen3.5-9B-Q4_K_M",
+  "host": "127.0.0.1",
+  "port": 8056,
+  "context_tokens": 65536,
+  "threads": 12,
+  "gpu_layers": 0
+}
