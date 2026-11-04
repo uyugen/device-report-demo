@@ -89,6 +89,8 @@ def validate_narrative(data, refs, allow_normal=False):
             raise ValueError('正文长度不符合约定')
         if re.search(r'\d', value):
             raise ValueError('模型不得新增或复述数字，数值由系统填入')
+        if re.search(r'[零〇一二两三四五六七八九十百千万]+点[零〇一二两三四五六七八九]+',value):
+            raise ValueError('不要用中文数字转写实测数值；正文仅解释规则结论，数值由系统图表展示')
         for term in ['已确诊','确定为','立即停机','必须更换','已经损坏','已发生轴承故障','设备正常','设备健康']:
             if allow_normal and term=='设备正常':continue
             for match in re.finditer(re.escape(term),value):
@@ -115,6 +117,28 @@ def prepare_context(facts, knowledge):
                      'estimator':'UTF-8字节数保守上界，非供应商精确分词'}
 
 
+def local_report_schema(facts, refs):
+    """Constrain local generation without weakening the existing semantic checks."""
+    # llama.cpp handles pattern before min/maxLength. Bound repetition in the
+    # pattern itself and exclude JSON quotes, escapes and control characters.
+    prose={'type':'string','minLength':5,'maxLength':160,
+           'pattern':'^[A-Za-z 一-鿿，。；：、（）《》“”‘’！？％＋—·/]{5,160}$'}
+    citation={'type':'string','enum':list(refs)} if refs else {'type':'string'}
+    references={'type':'array','items':citation,'maxItems':len(refs),'uniqueItems':True}
+    empty={'type':'array','items':{'type':'object'},'maxItems':0}
+    charts=facts['report_spec']['charts']
+    explanation={'type':'object','properties':{
+        'dataset_id':{'type':'string','enum':[c['dataset_id'] for c in charts]},
+        'text':prose,'knowledge_ids':{**references,'minItems':1}},
+        'required':['dataset_id','text','knowledge_ids'],'additionalProperties':False}
+    properties={k:prose for k in ['mechanism','assessment','limitations','action1','action2']}
+    properties.update(citations=references,hypotheses=empty,
+        chart_explanations={'type':'array','items':explanation if charts else {'type':'object'},
+                            'minItems':len(charts),'maxItems':len(charts)})
+    return {'type':'json_schema','json_schema':{'name':'equipment_report','strict':True,
+            'schema':{'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}}}
+
+
 def validate_evidence_claims(data, facts):
     text='；'.join(data[k] for k in ['mechanism','limitations','action1','action2'])
     availability=facts.get('availability',{})
@@ -134,6 +158,9 @@ def validate_evidence_claims(data, facts):
         raise ValueError('未提供波形，不能描述观察到的波形或频谱现象')
     if facts.get('mode')=='real_measurement' and affirmative(r'(波形显示|波形可见|观察到冲击|近似正弦|呈正弦|持续上升|全谱主峰|主频为)'):
         raise ValueError('模型未接收图像或完整趋势，不得描述未经提供的形态或全谱主峰')
+    if facts.get('mode')=='real_measurement' and affirmative(
+            r'(?:波形(?!图)|频谱(?!图)|特征值|实测数据|频谱坐标)[^。；！？]{0,24}(?:程序|系统|模型)(?:生成|模拟|复算)'):
+        raise ValueError('真实案例的特征值、波形和频谱坐标均由客户提供；程序仅整理证据及绘图，不得写成程序生成或复算实测数据')
     return data
 
 
@@ -200,8 +227,9 @@ def validate_reader_narrative(data, refs, facts):
             raise ValueError('不得套用正常报告示例中的稳定性、健康状态或图像观察结论')
         if status=='正常' and not re.search(r'正常',data['assessment']):
             raise ValueError('全部已执行规则正常时，综合判定须按本次机理规则明确写正常')
-        if status=='正常' and not facts['report_spec']['directions'] and re.search(r'疑似|可能.*故障|优先排查|动平衡|拆检|更换',visible):
-            raise ValueError('未命中故障规则时不得延续部分符合的故障猜测或故障检修建议')
+        normal_banned=re.search(r'疑似|可能.*故障|优先排查|动平衡|拆检|更换',visible)
+        if status=='正常' and not facts['report_spec']['directions'] and normal_banned:
+            raise ValueError('正常且无历史故障时，正文不得出现“'+normal_banned.group()+'”；仅保留日常点检、润滑、紧固与监测建议，也不要用否定句罗列故障检修')
         if status=='故障' and ('故障' not in data['assessment'] or re.search(r'当前.{0,8}正常|本次.{0,12}正常',data['assessment'])):
             raise ValueError('已有规则全部满足时，综合判定须明确对应故障，不得报告当前正常')
         if status=='无法判定' and not re.search(r'无法判定|不能判定|尚不能判断',data['assessment']):
@@ -301,6 +329,9 @@ def write_report(facts, knowledge, use_llm):
         timeout=float(os.getenv('MODEL_TIMEOUT_SECONDS','100'))
         if not 10<=timeout<=3600:raise ValueError('模型超时须在十秒至一小时之间')
         reader=facts.get('report_spec',{}).get('version')=='reader_report_v3'
+        if reader and os.getenv('MODEL_API_STYLE')=='llama_cpp':
+            payload['response_format']=local_report_schema(facts,refs)
+            payload['messages'][-1]['content']+='\n写作提醒：摘要和综合判定只解释结论，不逐条复述条件或实测数值，也不要把数值改写成中文数字。真实案例的特征值、波形和频谱坐标由客户提供，程序只整理证据与绘图，不能声称生成或复算了实测数据。'
         for attempt in range(2 if reader else 1):
             with httpx.Client(timeout=timeout,trust_env=urlsplit(base).hostname not in {'localhost','127.0.0.1','::1'}) as client:
                 r = client.post(base+'/chat/completions',headers={'Authorization':'Bearer '+os.environ['MODEL_API_KEY']},

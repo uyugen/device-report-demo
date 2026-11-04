@@ -62,6 +62,8 @@ def test_prompt_includes_all_knowledge_without_endpoint_evidence():
     lambda t:t['chart_explanations'][0].update(text='本次指标为九百，波形显示冲击。'),
     lambda t:t.update(assessment='程序统计满足三项，部分符合。'),
     lambda t:t.update(mechanism='目前大概率发生电机转子不平衡。'),
+    lambda t:t.update(limitations='波形及频谱坐标由程序生成，未提供绝对采集时间。'),
+    lambda t:t.update(mechanism='最近记录中峭度值为一点五，未满足相应条件。'),
     lambda t:t['chart_explanations'][0].update(text='模型判断数值是123，建议关注。'),
 ])
 def test_invalid_explanations_and_reader_unfriendly_prose_rejected(mutation):

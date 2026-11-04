@@ -33,7 +33,18 @@ def test_local_and_remote_request_configuration(monkeypatch,style,base,local):
     assert info['mode']=='llm' and result==text
     url,payload=calls[0]
     assert url.count('/v1')==1 and url.endswith('/chat/completions')
-    assert payload['response_format']=={'type':'json_object'}
+    if style=='llama_cpp':
+        fmt=payload['response_format'];assert fmt['type']=='json_schema'
+        schema=fmt['json_schema']['schema']
+        assert not schema['additionalProperties']
+        import re
+        pattern=schema['properties']['mechanism']['pattern']
+        assert re.fullmatch(pattern,'当前设备状态正常。')
+        for invalid in ['历史104次', '中'*161, '正常"状态说明', '正常\\状态说明', '正常\n状态说明']:
+            assert not re.fullmatch(pattern,invalid)
+        assert schema['properties']['chart_explanations']['minItems']==len(facts['report_spec']['charts'])
+        assert schema['properties']['hypotheses']['maxItems']==0
+    else:assert payload['response_format']=={'type':'json_object'}
     assert info['deployment']==('local' if local else 'remote')
     assert clients[0]['trust_env']==(not local)
     assert clients[0]['timeout']==(900 if local else 100)
