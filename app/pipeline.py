@@ -69,7 +69,11 @@ def write(s):
     out=WORK/s['run_id'];out.mkdir(exist_ok=True)
     from .writer import system_prompt
     (out/'writer_input.json').write_text(json.dumps({'system_prompt':system_prompt(facts),'facts':facts,'knowledge':s['knowledge']},ensure_ascii=False,indent=2),encoding='utf-8')
-    s['text'],s['writer']=write_report(facts,s['knowledge'],s['use_llm']);log(s,'结合实测依据与全部知识编写机理分析及建议');return s
+    s['text'],s['writer']=write_report(facts,s['knowledge'],s['use_llm'])
+    if a.get('report_plan',{}).get('version')=='reader_report_v3':
+        from .reader_report import merge_report_citations
+        s['text'],s['writer']['citation_sources']=merge_report_citations(s['text'],a['report_plan'],s['knowledge'])
+    log(s,'结合实测依据与全部知识编写机理分析及建议');return s
 
 def simulation_facts(snap,a,decision):
     return {'mode':'simulated','case_id':snap['case_id'],'device':snap['device'],
@@ -126,6 +130,7 @@ def run(run_id,case_id,case_path,use_llm):
                   'rules':s['rules'],'template_sha256':hashlib.sha256((ROOT/'inputs/reference.docx').read_bytes()).hexdigest()}
         (out/'evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
         report={'id':run_id,'case_id':s['snapshot']['case_id'],'case_title':s['snapshot']['title'],'mode':s['snapshot'].get('mode','simulated'),'events':s['events'],
+                'is_test_data':s['snapshot'].get('is_test_data',False),'data_notice':s['snapshot'].get('data_notice',''),
                 'device':s['snapshot']['device'],'measured_time':s['snapshot']['measured_time'],
                 'summary':s['summary'],'decision':s['decision'],'analysis':evidence['analysis'],
                 'knowledge':s['knowledge'],'writer':s['writer'],'text':s['text'],'pdf':s['pdf'],

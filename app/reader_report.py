@@ -62,12 +62,25 @@ def build_report_plan(snapshot, analysis, decision, configured_rules):
                                 'knowledge_id': d['knowledge_id'], 'conditions': conditions})
         selected.append({**chart, 'chart_type': 'line', 'related_rules': related})
     return {'version': VERSION, 'matching_mode':decision.get('matching_mode'),
+            'rule_citations':list(dict.fromkeys(r['knowledge_id'] for r in decision['rules']
+                                               if r.get('records') and r.get('knowledge_id'))),
             'overall_status':overall,'historical_status_counts':decision.get('historical_status_counts',{}),
             'conclusion': conclusion, 'directions': directions,
             'charts': selected, 'available_chart_count': len(available),
             'selection_policy': '仅为最近或历史某一时刻全部条件满足的故障方向配图；部分满足不作为故障方向，不单独配图。'
                                 '无故障命中时生成正常或无法判定的文字报告，缺少输入不补图。',
             'line_policy': '按原始时间或坐标连接相邻实测点；不插值，不将采集间隔解释为连续实测。'}
+
+
+def merge_report_citations(text, plan, knowledge):
+    """Executed rules are report evidence even when they conclude normal."""
+    valid={k['id'] for k in knowledge}
+    rule_ids=plan.get('rule_citations',[])
+    if not set(rule_ids)<=valid:raise ValueError('已执行规则的知识来源不存在，不能生成无来源引用')
+    narrative=list(text.get('citations',[]))
+    return {**text,'citations':list(dict.fromkeys([*rule_ids,*narrative]))}, {
+        'rules':rule_ids,'narrative':narrative,
+        'note':'规则依据包含已执行但未命中故障的条目；引用不表示发生对应故障。'}
 
 
 def fallback_chart_explanations(plan):

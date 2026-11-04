@@ -51,13 +51,14 @@ async def upload_case(file:UploadFile=File(...)):
     raw=await file.read(MAX_ZIP+1)
     try:
         snap=parse_zip(raw)
-        if snap.get('mode')!='real_measurement':raise ValueError('新版工作台仅接受真实案例输入包，请使用1.1版格式')
+        if snap.get('mode')!='real_measurement':raise ValueError('请使用1.1版最终值输入格式，支持真实采集或明确标注的派生测试数据')
         snap['quality']=check_snapshot(snap);a=analyse(snap)
     except (ValueError,TypeError,KeyError,OverflowError) as e:raise HTTPException(400,str(e))
     cid=uuid.uuid4().hex
     folder=WORK/'cases';folder.mkdir(exist_ok=True)
     (folder/f'{cid}.zip').write_bytes(raw)
     preview={'case_id':cid,'title':snap['title'],'device':snap['device'],'mode':snap.get('mode','simulated'),
+             'is_test_data':snap.get('is_test_data',False),'data_notice':snap.get('data_notice',''),
              'measurement':{k:snap[k] for k in ['measured_time','sampling_rate','sample_count','duration_seconds']},
              'history_count':sum(len(d['rows']) for d in snap.get('datasets',[]) if d['kind']=='trend') if snap.get('mode')=='real_measurement' else len(snap['history']),'has_waveform':snap['waveform'] is not None,
              'warnings':a['warnings'],'limitations':a['missing'],'comparisons':a['comparisons'],

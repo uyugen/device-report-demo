@@ -253,6 +253,12 @@ def validate_reader_narrative(data, refs, facts):
         if charts[cid]['kind']=='spectrum' and variable and not re.search(r'最近记录|历史',item['text']):
             raise ValueError('频谱机理含义须明确最近记录或历史范围，不能将某时刻的比值推广到全部历史')
         allowed={r['knowledge_id'] for r in charts[cid]['related_rules']}
+        related_ids={r['rule_id'] for r in charts[cid]['related_rules']}
+        related=[r for r in facts['decision']['rules'] if r['id'] in related_ids]
+        uses_orders=any(x.get('kind')=='spectrum' for r in related
+                        for c in (r.get('latest') or {}).get('conditions',[]) for x in c.get('sources',[]))
+        if related and not uses_orders and re.search(r'(需|应|必须).{0,6}结合倍频',item['text']):
+            raise ValueError('该图相关机理规则不含倍频条件，不要添加倍频或速度水平作为补充判定前提；只解释该规则实际条件及当前/历史证据')
         ids=item['knowledge_ids']
         if not isinstance(ids,list) or not ids or not all(isinstance(x,str) and x in allowed and x in base['citations'] for x in ids):
             raise ValueError('图表机理含义缺少对应机理引用')
@@ -332,6 +338,16 @@ def write_report(facts, knowledge, use_llm):
         if reader and os.getenv('MODEL_API_STYLE')=='llama_cpp':
             payload['response_format']=local_report_schema(facts,refs)
             payload['messages'][-1]['content']+='\n写作提醒：摘要和综合判定只解释结论，不逐条复述条件或实测数值，也不要把数值改写成中文数字。真实案例的特征值、波形和频谱坐标由客户提供，程序只整理证据与绘图，不能声称生成或复算了实测数据。'
+            payload['messages'][-1]['content']+='每段以四十至八十个汉字为宜，写完整句子。limitations仅说明已记录的资料限制或共用频谱边界，不要求补充工况、方向、负载或运行状态。不得声称资料归属问题不影响判定。'
+            payload['messages'][-1]['content']+='图下不要套用示例句，只解释related_rules对应规则实际含有的条件；规则不含倍频或速度条件时，不添加这些补判前提。峰值和有效值若用于比值，应解释二者比值，不写成单项数值独立达标。历史仅部分时刻满足时明确写最近记录或历史部分记录。不要声称数据显著升高、设备运行平稳或维持健康水平；不要提出立即拆检或直接更换，先现场复核，再按检查结果安排维护。'
+            if facts['report_spec'].get('overall_status')=='正常' and not facts['report_spec']['directions']:
+                payload['messages'][-1]['content']+='本次当前及历史均无故障，措施只写日常点检、紧固、润滑和监测。所有字段都避免出现停机、拆检、动平衡、更换等检修词语，包括否定句。'
+            if facts.get('is_test_data'):
+                payload['messages'][-1]['content']+='本次是明确标注的派生测试数据。故障结论仅针对测试包及已执行规则，不代表客户设备真实发生故障。'
+        request_upper=sum(len(m['content'].encode('utf-8')) for m in payload['messages'])+1024
+        if request_upper+budget['output_reserved_tokens']>budget['context_limit']:
+            raise ValueError('包含写作提醒的完整请求超过上下文预算，未截断知识、未调用模型')
+        info['request_input_token_upper_bound']=request_upper
         for attempt in range(2 if reader else 1):
             with httpx.Client(timeout=timeout,trust_env=urlsplit(base).hostname not in {'localhost','127.0.0.1','::1'}) as client:
                 r = client.post(base+'/chat/completions',headers={'Authorization':'Bearer '+os.environ['MODEL_API_KEY']},

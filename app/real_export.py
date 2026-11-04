@@ -115,6 +115,7 @@ def export_real(reference,s,a,decision,text,out,knowledge,writer):
             if decision.get('trend_start') and decision.get('trend_end'):
                 subtitle+='  |  数据时间区间 '+decision['trend_start'][:10]+' 至 '+decision['trend_end'][:10]
             paragraph(subtitle,1)
+            if s.get('is_test_data'):paragraph(s['data_notice'],1)
             number=0
             def section_heading(title):
                 nonlocal number
@@ -235,7 +236,7 @@ def export_real(reference,s,a,decision,text,out,knowledge,writer):
                 part=etree.fromstring(src.read(item.filename))
                 for p in part.xpath('//w:p',namespaces=NS):
                     old=''.join(p.xpath('.//w:t/text()',namespaces=NS))
-                    if '示例报告' in old or '模拟数据' in old:replace_text(p,'设备状态报告')
+                    if '示例报告' in old or '模拟数据' in old:replace_text(p,'设备状态报告'+(' · 派生测试数据' if s.get('is_test_data') else ''))
                     if 'RPT-0001' in old:replace_text(p,'报告 '+out.name+' | 设备 '+(device.get('device_code') or device['id']))
                 updates[item.filename]=etree.tostring(part,xml_declaration=True,encoding='UTF-8',standalone=True)
         with ZipFile(out/'report.docx','w') as dest:

@@ -45,6 +45,17 @@ def read(raw=None):
     s=parse_zip(raw or real_zip());s['quality']=check_snapshot(s);return s
 
 
+def test_derived_test_requires_notice_and_preserves_final_value_processing():
+    def missing(c,data):c['data_type']='derived_test'
+    with pytest.raises(ValueError,match='data_notice'):read(real_zip(missing))
+    def marked(c,data):
+        c['data_type']='derived_test';c['data_notice']='故障注入测试数据，不代表客户真实故障。'
+    s=read(real_zip(marked));a=analyse(s)
+    assert s['is_test_data'] and '测试' in s['data_notice']
+    assert not a['signal_recalculation'] and not a['recomputed_features']
+    assert not read()['is_test_data']
+
+
 def test_real_final_values_are_never_recomputed(monkeypatch):
     def fail(*args,**kwargs):raise AssertionError('不得调用信号复算')
     monkeypatch.setattr('app.signal_data.features',fail)

@@ -76,7 +76,7 @@ def draw_real(snapshot, analysis, out):
                 inset.set(xlim=(0,500),ylim=(0,None),title='低频局部 0–500 Hz')
                 inset.tick_params(labelsize=7);inset.title.set_fontsize(8)
                 inset.spines[['top','right']].set_visible(False);inset.grid(alpha=.15)
-        ax.set(title='真实采集数据 · '+d['name'],xlabel='采集时间' if d['kind']=='trend' else ('相对时间 (s)' if d['kind']=='waveform' else '频率 (Hz)'),
+        ax.set(title=('派生测试数据 · ' if snapshot.get('is_test_data') else '真实采集数据 · ')+d['name'],xlabel='采集时间' if d['kind']=='trend' else ('相对时间 (s)' if d['kind']=='waveform' else '频率 (Hz)'),
                ylabel=d['name']+' ('+d['y_axis']['unit']+')')
         ax.grid(alpha=.18);ax.spines[['top','right']].set_visible(False)
         fig.tight_layout();fig.savefig(out/chart['file'],dpi=180,facecolor='white');plt.close(fig)

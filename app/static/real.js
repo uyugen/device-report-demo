@@ -21,7 +21,7 @@ function realCasePreview(data, archived) {
   const series=data.series || [],charts=data.chart_manifest || [];
   const panel=$('case-preview');panel.hidden=false;
   panel.innerHTML=`<h2>数据检查信息</h2><span class="case-title">${esc(data.title)}${archived?' · 报告关联案例':''}</span>
-    <dl class="case-meta"><dt>数据性质</dt><dd><span class="tag tag-success">真实采集</span></dd>
+    <dl class="case-meta"><dt>数据性质</dt><dd><span class="tag ${data.is_test_data?'tag-warning':'tag-success'}">${data.is_test_data?'派生测试数据':'真实采集'}</span></dd>
     <dt>设备</dt><dd>${esc(data.device.name)}</dd><dt>部位 / 测点</dt><dd>${esc(data.device.component)} / ${esc(data.device.point_name)}</dd>
     <dt>监测部位</dt><dd>${esc(data.device.measure_point_name || '未提供')}</dd>
     <dt>采集工况</dt><dd>${esc(data.acquisition_status?.label || '未统计')}</dd>
@@ -32,10 +32,10 @@ function realCasePreview(data, archived) {
     <dt>采集时间</dt><dd>${esc(data.measurement?.measured_time || '未提供绝对时间')}</dd>
     <dt>图表</dt><dd>${charts.length} 张，使用原始坐标</dd></dl>
     <div class="case-check ${data.warnings.length?'has-warning':''}">输入结构已通过 · ${data.warnings.length?'存在待核查信息':'未发现结构错误'}</div>
-    ${warnings(data.warnings)}
+    ${data.is_test_data?`<p class="hint">${esc(data.data_notice)}</p>`:''}${warnings(data.warnings)}
     <details class="accordion"><summary>分析限制（${data.limitations.length} 项）</summary><div class="accordion-body">${data.limitations.map(x=>`<p>${esc(x)}</p>`).join('')}</div></details>
     <details class="accordion"><summary>历史特征清单</summary><div class="accordion-body">${realHistoryTable(series)}</div></details>
-    <p class="hint">直接使用客户提供的特征与频谱，不复算信号。</p>`;
+    <p class="hint">${data.is_test_data?'使用测试包最终值，不复算信号。':'直接使用客户提供的特征与频谱，不复算信号。'}</p>`;
 }
 function renderReal(data) {
   document.getElementById('report-audit')?.remove();
@@ -83,7 +83,7 @@ function renderReaderReport(data) {
   <tr><th scope="row">设备编码</th><td class="device-code">${esc(data.device.device_code || '未提供')}</td><th scope="row">监测部位</th><td>${esc(data.device.measure_point_name || '未提供')}</td></tr>
   <tr><th scope="row">采集工况</th><td colspan="3">${esc(a.acquisition_status?.label || '未统计')}（记录占比）</td></tr></tbody></table></div>`;
   const start=data.decision.trend_start?.slice(0,10),end=data.decision.trend_end?.slice(0,10);
-  let html=`<header class="report-header"><h1>${esc(data.device.name)}状态分析报告</h1><div class="report-location">${esc(data.device.region_name || data.device.location)}${start&&end?' | 数据时间区间 '+esc(start)+' 至 '+esc(end):''}</div></header>`;
+  let html=`<header class="report-header"><h1>${esc(data.device.name)}状态分析报告</h1><div class="report-location">${esc(data.device.region_name || data.device.location)}${start&&end?' | 数据时间区间 '+esc(start)+' 至 '+esc(end):''}</div>${data.is_test_data?`<p class="caption">${esc(data.data_notice)}</p>`:''}</header>`;
   html+=section('结论摘要',`<p><strong>当前状态：</strong>${esc(plan.conclusion)}</p><p>${esc(data.text.mechanism)}</p>`);
   html+=section('设备与数据范围',scope);
   for(const [kind,title] of [['trend','振动趋势'],['waveform','时域波形'],['spectrum','幅值频谱']]) {
@@ -98,7 +98,7 @@ function renderReaderReport(data) {
     references.get(k.source).push(`[${k.id}] ${k.section}`);
   }
   html+=section('参考源',[...references].map(([source,entries])=>`<p class="citation">来源文件：${esc(source)}</p><p class="citation">引用条目：${esc(entries.join('；'))}</p>`).join('') || '<p>本次未引用具体机理条目。</p>');
-  $('empty').hidden=true;$('report').hidden=false;$('report-state').textContent='真实数据报告';$('report').innerHTML=html;
+  $('empty').hidden=true;$('report').hidden=false;$('report-state').textContent=data.is_test_data?'派生测试报告':'真实数据报告';$('report').innerHTML=html;
   $('downloads').innerHTML=`${data.pdf.available?`<a class="button primary" href="${base}report.pdf" target="_blank" rel="noopener">查看 PDF</a>`:''}<a class="button" href="${base}report.docx">下载 Word</a><a class="text-link" href="${base}evidence.json" target="_blank" rel="noopener">依据</a><a class="text-link" href="${base}writer_input.json" target="_blank" rel="noopener">写作输入</a>`;
   const audit=document.createElement('section');audit.id='report-audit';audit.className='report-section';
   audit.innerHTML=`<details class="accordion"><summary>核查资料（不纳入导出报告）</summary><div class="accordion-body"><p>${esc(data.writer.message)}</p><p>${esc(plan.selection_policy)}</p><p>${esc(plan.line_policy)}</p><p>${esc(data.text.limitations)}</p>${warnings(a.warnings)}${mechanismRuleRows(data.decision,base)}</div></details>`;

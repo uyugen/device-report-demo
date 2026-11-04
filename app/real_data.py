@@ -66,8 +66,12 @@ def parse_real(data):
         c = json.loads(data['case.json'].decode('utf-8-sig'))
     except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
         raise ValueError('缺少有效UTF-8 case.json') from None
-    if not isinstance(c, dict) or c.get('schema_version') != '1.1' or c.get('data_type') != 'real_measurement':
-        raise ValueError('真实数据须使用schema_version="1.1"、data_type="real_measurement"')
+    if not isinstance(c, dict) or c.get('schema_version') != '1.1' or c.get('data_type') not in {'real_measurement','derived_test'}:
+        raise ValueError('最终值数据须使用schema_version="1.1"、data_type="real_measurement"或"derived_test"')
+    is_test=c['data_type']=='derived_test'
+    notice=c.get('data_notice','')
+    if is_test and (not isinstance(notice,str) or not 5<=len(notice)<=300):
+        raise ValueError('派生测试数据须提供data_notice说明，不能冒充真实故障实测')
     for key in ['device','point','operating_condition','latest_acquisition']:
         if not isinstance(c.get(key),dict):
             raise ValueError(key+'必须是对象')
@@ -130,6 +134,7 @@ def parse_real(data):
          'direction': point.get('direction_name') or point.get('direction_code_raw'),
          'rpm': operating.get('rpm'), 'load': operating.get('load')}
     return {'mode': 'real_measurement', 'case_id': c.get('case_id'), 'title': c.get('case_name'),
+            'is_test_data':is_test,'data_notice':notice,
             'device': d, 'case_manifest': c, 'datasets': parsed,
             'measured_time': c.get('latest_acquisition', {}).get('measured_time'),
             'sampling_rate': None, 'sample_count': None, 'duration_seconds': None,
@@ -345,6 +350,7 @@ def real_decision(s, a, rules):
 
 def real_facts(s, a, decision):
     return {'mode':s['mode'], 'case_id':s['case_id'], 'device':s['device'],
+            **({'is_test_data':True,'data_notice':s['data_notice']} if s.get('is_test_data') else {}),
             'availability':{'raw_waveform_provided':s['waveform'] is not None,
                             'spectrum_provided':a['spectrum_provided'], 'spectrum_computed':False,
                             'chart_images_sent_to_model':False,

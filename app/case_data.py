@@ -65,7 +65,7 @@ def parse_zip(raw):
         manifest = json.loads(real_members.get('case.json', b'{}').decode('utf-8-sig'))
     except (UnicodeDecodeError, json.JSONDecodeError):
         raise ValueError('case.json不是有效UTF-8 JSON') from None
-    if isinstance(manifest, dict) and manifest.get('data_type') == 'real_measurement':
+    if isinstance(manifest, dict) and manifest.get('data_type') in {'real_measurement','derived_test'}:
         return parse_real(real_members)
     if len(raw) > MAX_ZIP:
         raise ValueError('案例ZIP不能超过20MB')

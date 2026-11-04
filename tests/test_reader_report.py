@@ -1,6 +1,6 @@
 from copy import deepcopy
 import pytest
-from app.reader_report import build_report_plan, fallback_chart_explanations
+from app.reader_report import build_report_plan, fallback_chart_explanations, merge_report_citations
 from app.writer import validate_reader_narrative, system_prompt, prepare_context
 from test_mechanism_matching import setup_case
 from app.mechanism_rules import match_rules
@@ -44,6 +44,32 @@ def test_weak_rules_do_not_fill_report_with_unrelated_charts():
     assert '正常' in plan['conclusion']
 
 
+def test_normal_rule_sources_do_not_depend_on_model_citations():
+    s,a,r,k,d,plan,facts,text=sample()
+    for rule in d['rules']:
+        for key in ['latest_assessment','best']:rule[key]['all_conditions_met']=False
+    d['overall_status']='正常'
+    plan=build_report_plan(s,a,d,r)
+    text['citations']=[]
+    merged,sources=merge_report_citations(text,plan,k)
+    assert not plan['directions'] and not plan['charts']
+    assert merged['citations']==[x['id'] for x in k]
+    assert sources['narrative']==[] and sources['rules']==merged['citations']
+    assert text['citations']==[]
+
+
+def test_blocked_rules_are_not_cited_as_executed_and_extra_citations_are_kept():
+    s,a,r,k,d,plan,facts,text=sample()
+    d['rules'][0].pop('records');d['rules'][0]['status']='禁用'
+    d['rules'][0].pop('latest_assessment');d['rules'][0].pop('best')
+    plan=build_report_plan(s,a,d,r)
+    text['citations']=['OTHER']
+    merged,sources=merge_report_citations(text,plan,[*k,{'id':'OTHER'}])
+    assert k[0]['id'] not in sources['rules']
+    assert merged['citations']==[x['id'] for x in k[1:]]+['OTHER']
+    with pytest.raises(ValueError,match='来源不存在'):merge_report_citations(text,plan,[])
+
+
 def test_prompt_includes_all_knowledge_without_endpoint_evidence():
     s,a,r,k,d,plan,facts,text=sample()
     a['series']=[{'name':'速度','first':{'y':'123456'},'last':{'y':'654321'},'count':3}]
@@ -64,6 +90,7 @@ def test_prompt_includes_all_knowledge_without_endpoint_evidence():
     lambda t:t.update(mechanism='目前大概率发生电机转子不平衡。'),
     lambda t:t.update(limitations='波形及频谱坐标由程序生成，未提供绝对采集时间。'),
     lambda t:t.update(mechanism='最近记录中峭度值为一点五，未满足相应条件。'),
+    lambda t:next(x for x in t['chart_explanations'] if x['dataset_id']=='acceleration_peak').update(text='本次该项符合相应条件，但仍需结合倍频关系及速度水平判断。'),
     lambda t:t['chart_explanations'][0].update(text='模型判断数值是123，建议关注。'),
 ])
 def test_invalid_explanations_and_reader_unfriendly_prose_rejected(mutation):

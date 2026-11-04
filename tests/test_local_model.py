@@ -66,3 +66,19 @@ def test_invalid_model_timeout_does_not_call_provider(monkeypatch):
     monkeypatch.setattr('app.writer.httpx.Client',forbidden)
     result,info=write_report(facts,[],True)
     assert info['mode']=='template' and '超时' in info['message']
+
+
+def test_local_writing_reminders_are_included_in_context_guard(monkeypatch):
+    from app.writer import prepare_context
+    from test_mechanism_matching import setup_case
+    *_,facts,text=sample();knowledge=setup_case()[3]
+    monkeypatch.setenv('MODEL_CONTEXT_TOKENS','65536')
+    _,budget=prepare_context(facts,knowledge)
+    monkeypatch.setenv('MODEL_CONTEXT_TOKENS',str(budget['input_token_upper_bound']+budget['output_reserved_tokens']))
+    monkeypatch.setenv('LLM_ENABLED','true');monkeypatch.setenv('MODEL_API_KEY','test-only')
+    monkeypatch.setenv('MODEL_API_STYLE','llama_cpp');monkeypatch.setenv('MODEL_BASE_URL','http://127.0.0.1:8056/v1')
+    monkeypatch.setenv('MODEL_TIMEOUT_SECONDS','900')
+    def forbidden(*args,**kwargs):raise AssertionError('Over-budget request must not contact model')
+    monkeypatch.setattr('app.writer.httpx.Client',forbidden)
+    _,info=write_report(facts,knowledge,True)
+    assert info['mode']=='template' and '包含写作提醒' in info['message']
