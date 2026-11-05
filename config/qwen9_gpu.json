@@ -1,0 +1,19 @@
+{
+  "runtime_root": "/data1/tjb/qwen9-gpu",
+  "binary": "runtime/bin/llama-server",
+  "library_dir": "runtime/bin",
+  "model_file": "models/Qwen3.5-9B-Q4_K_M.gguf",
+  "model_name": "Qwen3.5-9B-Q4_K_M",
+  "host": "127.0.0.1",
+  "port": 8058,
+  "context_tokens": 65536,
+  "threads": 8,
+  "gpu_device": 5,
+  "gpu_layers": 99,
+  "gpu_budget_mib": 12288,
+  "start_free_mib": 20480,
+  "min_free_mib": 2048,
+  "batch_size": 512,
+  "ubatch_size": 128,
+  "cache_type": "q8_0"
+}
