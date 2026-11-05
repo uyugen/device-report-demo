@@ -171,8 +171,11 @@ def build_real_figure(snapshot, analysis, chart):
     ax.set_ylabel(d['name'] + ('（无量纲）' if unit in ['1', '无量纲', '-'] else f'（{unit}）'),
                   fontsize=10.5, color=ink, labelpad=8)
     fig.text(.105, .93, d['name'] + ('趋势' if trend else ''), fontsize=12.5, color=ink)
-    fig.text(.975, .935, '模拟健康分数' if d.get('data_origin') == 'illustrative' else '派生测试数据' if snapshot.get('is_test_data') else '真实采集数据',
-             fontsize=9, color=muted, ha='right')
+    origin = d.get('data_origin', 'provided') if health else snapshot.get('data_origin', 'provided')
+    origin_label = ('模拟健康分数' if origin == 'illustrative' else '派生测试数据' if snapshot.get('is_test_data')
+                    else '真实采集数据' if origin == 'real_measurement' else '')
+    if origin_label:
+        fig.text(.975, .935, origin_label, fontsize=9, color=muted, ha='right')
     ax.legend(handles=handles, loc='lower left', bbox_to_anchor=(0, 1.015), borderaxespad=0,
               frameon=False, fontsize=9, ncol=2, labelcolor=muted, handlelength=2.3, columnspacing=1.6)
     note = '按实际时间连接采集点，连线不表示间隔内连续实测。' if trend else '按客户提供的原始坐标绘制。'

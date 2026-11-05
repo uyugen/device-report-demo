@@ -131,6 +131,7 @@ def run(run_id,case_id,case_path,use_llm):
         (out/'evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
         report={'id':run_id,'case_id':s['snapshot']['case_id'],'case_title':s['snapshot']['title'],'mode':s['snapshot'].get('mode','simulated'),'events':s['events'],
                 'is_test_data':s['snapshot'].get('is_test_data',False),'data_notice':s['snapshot'].get('data_notice',''),
+                'data_origin':s['snapshot'].get('data_origin','provided'),
                 'device':s['snapshot']['device'],'measured_time':s['snapshot']['measured_time'],
                 'summary':s['summary'],'decision':s['decision'],'analysis':evidence['analysis'],
                 'knowledge':s['knowledge'],'writer':s['writer'],'text':s['text'],'pdf':s['pdf'],

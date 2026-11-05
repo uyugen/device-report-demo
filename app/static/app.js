@@ -119,6 +119,7 @@ async function restoreCasePreview(report) {
     if (caseId || $('case-file').files.length || active !== report.id) return;
     renderCasePreview({title:report.case_title || snapshot.title, device:report.device, mode:report.mode,
       is_test_data:report.is_test_data || snapshot.is_test_data,data_notice:report.data_notice || snapshot.data_notice,
+      data_origin:report.data_origin || snapshot.data_origin || snapshot.case_manifest?.data_type,
       measurement:snapshot, history_count:snapshot.history.length, has_waveform:snapshot.waveform != null,
       warnings:report.analysis.warnings, limitations:report.analysis.missing,
       comparisons:report.analysis.comparisons || [], features:report.analysis.uploaded_features || report.analysis.features,

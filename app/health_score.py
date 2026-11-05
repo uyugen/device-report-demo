@@ -23,7 +23,7 @@ def prepare_health_score(datasets):
         return None
     model = health['health_model']
     result = {'dataset_id': health['dataset_id'], 'model': model,
-              'data_origin': health.get('data_origin', 'real_measurement'),
+              'data_origin': health.get('data_origin', 'provided'),
               'data_notice': health.get('data_notice', ''), 'count': len(health['rows']),
               'source': health['data_file'], 'max_comparison_gap_seconds': MAX_COMPARISON_GAP_SECONDS,
               'caption': '评分模型：' + model['model_name'] + (' ' + model['model_version'] if model.get('model_version') else '') + '；算法：' + model['algorithm_name'],

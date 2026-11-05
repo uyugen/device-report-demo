@@ -133,6 +133,22 @@ def test_health_display_rounding_is_labelled_and_keeps_original_evidence():
     assert '速度有效值' not in info['summary_text']
 
 
+def test_unlabelled_health_input_is_neutral_without_test_or_real_claims():
+    def change(c,d):
+        c.pop('data_type',None)
+        c['datasets'][-1].pop('data_origin')
+        c['datasets'][-1].pop('data_notice')
+    s=sample(change);a=analyse(s)
+    assert s['data_origin']=='provided'
+    assert a['health_score']['data_origin']=='provided'
+    assert '模拟' not in a['health_score']['comparison_text']
+    ch=next(c for c in a['chart_manifest'] if c['kind']=='health_score')
+    fig,_=build_real_figure(s,a,ch)
+    try:
+        assert not any(any(word in t.get_text() for word in ['模拟','派生测试','真实采集']) for t in fig.texts)
+    finally:plt.close(fig)
+
+
 def test_writer_cannot_invent_health_explanation():
     from test_reader_report import sample as report_sample
     from app.writer import validate_reader_narrative

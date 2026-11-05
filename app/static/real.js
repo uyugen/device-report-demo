@@ -1,4 +1,5 @@
 /* Customer-final-value reports, with source rows and explicit acquisition boundaries. */
+const realInputLabel = data => data.is_test_data ? '派生测试数据' : data.data_origin === 'real_measurement' ? '真实采集' : '输入数据';
 function realHistoryTable(series) {
   return `<div class="table-scroll"><table><thead><tr><th>历史特征</th><th>单位</th><th class="numeric">记录数</th></tr></thead><tbody>${series.map(s=>`<tr><td>${esc(s.name)}</td><td class="unit">${esc(s.unit)}</td><td class="numeric">${esc(s.count)}</td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -21,7 +22,7 @@ function realCasePreview(data, archived) {
   const series=data.series || [],charts=data.chart_manifest || [];
   const panel=$('case-preview');panel.hidden=false;
   panel.innerHTML=`<h2>数据检查信息</h2><span class="case-title">${esc(data.title)}${archived?' · 报告关联案例':''}</span>
-    <dl class="case-meta"><dt>数据性质</dt><dd><span class="tag ${data.is_test_data?'tag-warning':'tag-success'}">${data.is_test_data?'派生测试数据':'真实采集'}</span></dd>
+    <dl class="case-meta"><dt>数据性质</dt><dd><span class="tag ${data.is_test_data?'tag-warning':'tag-success'}">${realInputLabel(data)}</span></dd>
     <dt>设备</dt><dd>${esc(data.device.name)}</dd><dt>部位 / 测点</dt><dd>${esc(data.device.component)} / ${esc(data.device.point_name)}</dd>
     <dt>监测部位</dt><dd>${esc(data.device.measure_point_name || '未提供')}</dd>
     <dt>采集工况</dt><dd>${esc(data.acquisition_status?.label || '未统计')}</dd>
@@ -59,7 +60,7 @@ function renderReal(data) {
   <details><summary>数据缺口与分析限制（${a.missing.length} 项）</summary><div class="accordion-body">${a.missing.map(v=>`<p>${esc(v)}</p>`).join('')}</div></details>`;
   const rules=data.decision.rules.map(r=>`<div class="rule-row"><span class="tag tag-warning">${esc(r.status)}</span><strong>${esc(r.name)}</strong><p>${esc(r.detail)}</p><p class="citation">${esc(r.source)}</p></div>`).join('');
   const correspondence=`<div class="table-scroll"><table><thead><tr><th>输入</th><th>报告位置</th><th>数据来源</th></tr></thead><tbody>${a.chart_manifest.map(ch=>`<tr><td>${esc(ch.dataset_id)} ${esc(ch.title)}</td><td>${ch.kind==='trend'?'03 振动趋势':ch.kind==='waveform'?'04 时域波形':'05 幅值频谱'}</td><td>${esc(ch.source)}</td></tr>`).join('')}</tbody></table></div>`;
-  $('empty').hidden=true;$('report').hidden=false;$('report-state').textContent='真实数据报告';
+  $('empty').hidden=true;$('report').hidden=false;$('report-state').textContent=realInputLabel(data)+'报告';
   $('downloads').innerHTML=`${data.pdf.available?`<a class="button primary" href="${base}report.pdf" target="_blank" rel="noopener">查看 PDF</a>`:''}<a class="button" href="${base}report.docx">下载 Word</a><a class="text-link" href="${base}evidence.json" target="_blank" rel="noopener">依据</a><a class="text-link" href="${base}writer_input.json" target="_blank" rel="noopener">写作输入</a>`;
   $('report').innerHTML=`<header class="report-header"><h1>${esc(data.device.component+data.device.point_name)}状态分析报告</h1><div class="report-location">${esc(data.device.location)} / ${esc(data.device.name)}</div></header>
     <section class="conclusion"><h3><span>01</span>结论摘要</h3><strong>${esc(data.decision.state)}</strong><p>${esc(data.summary)}</p><p><strong>${data.writer.mode==='llm'?'模型分析':'固定说明'}：</strong>${esc(data.text.mechanism)}</p></section>${warnings(a.warnings)}
@@ -102,7 +103,7 @@ function renderReaderReport(data) {
     references.get(k.source).push(`[${k.id}] ${k.section}`);
   }
   html+=section('参考源',[...references].map(([source,entries])=>`<p class="citation">来源文件：${esc(source)}</p><p class="citation">引用条目：${esc(entries.join('；'))}</p>`).join('') || '<p>本次未引用具体机理条目。</p>');
-  $('empty').hidden=true;$('report').hidden=false;$('report-state').textContent=data.is_test_data?'派生测试报告':'真实数据报告';$('report').innerHTML=html;
+  $('empty').hidden=true;$('report').hidden=false;$('report-state').textContent=data.is_test_data?'派生测试报告':data.data_origin==='real_measurement'?'真实数据报告':'数据报告';$('report').innerHTML=html;
   $('downloads').innerHTML=`${data.pdf.available?`<a class="button primary" href="${base}report.pdf" target="_blank" rel="noopener">查看 PDF</a>`:''}<a class="button" href="${base}report.docx">下载 Word</a><a class="text-link" href="${base}evidence.json" target="_blank" rel="noopener">依据</a><a class="text-link" href="${base}writer_input.json" target="_blank" rel="noopener">写作输入</a>`;
   const audit=document.createElement('section');audit.id='report-audit';audit.className='report-section';
   audit.innerHTML=`<details class="accordion"><summary>核查资料（不纳入导出报告）</summary><div class="accordion-body"><p>${esc(data.writer.message)}</p><p>${esc(plan.selection_policy)}</p><p>${esc(plan.line_policy)}</p><p>${esc(data.text.limitations)}</p>${warnings(a.warnings)}${mechanismRuleRows(data.decision,base)}</div></details>`;

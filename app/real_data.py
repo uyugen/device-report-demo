@@ -66,8 +66,11 @@ def parse_real(data):
         c = json.loads(data['case.json'].decode('utf-8-sig'))
     except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
         raise ValueError('缺少有效UTF-8 case.json') from None
-    if not isinstance(c, dict) or c.get('schema_version') not in {'1.1', '1.2'} or c.get('data_type') not in {'real_measurement','derived_test'}:
-        raise ValueError('最终值数据须使用schema_version="1.2"（兼容1.1）、data_type="real_measurement"或"derived_test"')
+    if not isinstance(c, dict) or c.get('schema_version') not in {'1.1', '1.2'}:
+        raise ValueError('最终值数据须使用schema_version="1.2"（兼容1.1）')
+    origin = c.get('data_type', 'provided' if c['schema_version']=='1.2' else None)
+    if origin not in {'provided','real_measurement','derived_test'}:
+        raise ValueError('data_type须为provided、real_measurement或derived_test；1.2版可省略')
     if c['schema_version'] == '1.2':
         from .input_format import normalize_compact
         c = normalize_compact(c, data)
@@ -137,7 +140,7 @@ def parse_real(data):
          'direction': point.get('direction_name') or point.get('direction_code_raw'),
          'rpm': operating.get('rpm'), 'load': operating.get('load')}
     return {'mode': 'real_measurement', 'case_id': c.get('case_id'), 'title': c.get('case_name'),
-            'is_test_data':is_test,'data_notice':notice,
+            'is_test_data':is_test,'data_notice':notice,'data_origin':c['data_type'],
             'device': d, 'case_manifest': c, 'datasets': parsed,
             'measured_time': c.get('latest_acquisition', {}).get('measured_time'),
             'sampling_rate': None, 'sample_count': None, 'duration_seconds': None,
@@ -198,7 +201,7 @@ def check_real(s):
                 raise ValueError('健康分数须在0到100之间')
             from .input_format import validate_health_metadata
             validate_health_metadata(d)
-            if d.get('data_origin', 'real_measurement') not in ('real_measurement', 'illustrative'):
+            if d.get('data_origin', 'provided') not in ('provided', 'real_measurement', 'illustrative'):
                 raise ValueError('健康分数来源标记不支持')
             if d.get('data_origin') == 'illustrative' and (not isinstance(d.get('data_notice'), str) or not 5 <= len(d['data_notice']) <= 300):
                 raise ValueError('示例健康分数须提供data_notice说明')

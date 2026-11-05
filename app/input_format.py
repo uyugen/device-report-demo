@@ -43,7 +43,7 @@ def normalize_compact(c, data):
     result = {
         'schema_version': '1.1', 'input_schema_version': '1.2',
         'case_id': c['case_id'], 'case_name': c.get('case_name', dev['device_name'] + '状态分析'),
-        'data_type': c.get('data_type'), 'data_notice': c.get('data_notice', ''),
+        'data_type': c.get('data_type', 'provided'), 'data_notice': c.get('data_notice', ''),
         'device': dict(dev),
         'point': {'local_point_id': point['point_id'], 'name_raw': point['measure_point_name'],
                   'measure_point_name': point['measure_point_name'],
@@ -65,8 +65,8 @@ def normalize_compact(c, data):
             if code is not None or d.get('measured_time') is not None or d.get('sampling') is not None:
                 raise ValueError('健康分数使用CSV逐行时间，不填写feature_code、measured_time或sampling')
             validate_health_metadata(d)
-            if d.get('data_origin', 'real_measurement') not in ('real_measurement', 'illustrative'):
-                raise ValueError('健康分数data_origin须为real_measurement或illustrative')
+            if d.get('data_origin', 'provided') not in ('provided', 'real_measurement', 'illustrative'):
+                raise ValueError('健康分数data_origin须为provided、real_measurement或illustrative')
             if d.get('data_origin') == 'illustrative' and (not isinstance(d.get('data_notice'), str) or not 5 <= len(d['data_notice']) <= 300):
                 raise ValueError('示例健康分数须提供data_notice说明')
         elif kind not in ('waveform', 'spectrum') or code is not None:

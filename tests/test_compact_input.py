@@ -91,3 +91,17 @@ def test_compact_test_data_still_requires_notice():
         read(compact_zip(lambda c,d:c.update(data_type='derived_test')))
     s = read(compact_zip(lambda c,d:c.update(data_type='derived_test', data_notice='派生故障测试，不代表真实故障。')))
     assert s['is_test_data']
+
+
+def test_compact_omitted_origin_is_neutral_and_preserves_values():
+    before=read(compact_zip())
+    after=read(compact_zip(lambda c,d:c.pop('data_type')))
+    assert after['data_origin']=='provided' and not after['is_test_data']
+    assert after['datasets']==before['datasets']
+    assert analyse(after)['order_coordinates']==analyse(before)['order_coordinates']
+
+
+def test_compact_explicit_neutral_origin_is_allowed_but_invalid_origin_is_rejected():
+    assert read(compact_zip(lambda c,d:c.update(data_type='provided')))['data_origin']=='provided'
+    with pytest.raises(ValueError,match='data_type'):
+        read(compact_zip(lambda c,d:c.update(data_type='unrecognized')))

@@ -6,7 +6,8 @@
 
 | 分组 | 字段 | 要求与用途 |
 | --- | --- | --- |
-| 案例 | schema_version、case_id、data_type | 必填；版本为字符串"1.2"，编号自行定义；真实采集为real_measurement，派生测试为derived_test |
+| 案例 | schema_version、case_id | 必填；版本为字符串"1.2"，编号自行定义 |
+| 案例 | data_type | 选填；省略时按provided读取，不显示测试属性，也不声明真实采集；兼容显式real_measurement或derived_test |
 | 案例 | case_name、data_notice | 名称选填；派生测试必须有5～300字说明，不代表客户真实故障 |
 | 设备device | device_id、device_name | 必填，平台ID与名称 |
 | 设备device | device_code、region_name | 设备编码、安装区域，建议填写；缺失时报告显示未提供，不用平台ID冒充设备编码 |
@@ -30,7 +31,7 @@
 | measured_time | 图谱选填，覆盖包级图谱时间；历史特征逐行时间在CSV中填写 |
 | sampling | 仅波形选填；sampling_rate_hz、sample_count、duration_seconds已知才填。系统检查参数和坐标一致，不反推缺失值 |
 | health_model | 仅健康度分值必填，含model_name、algorithm_name、calculation_status、configuration_name；model_version选填 |
-| data_origin、data_notice | 仅健康度分值使用；模拟评分为illustrative且须有说明，真实评分为real_measurement |
+| data_origin、data_notice | 仅健康度分值选填；均可省略，按provided读取，无模拟标记；兼容显式illustrative（须有说明）或real_measurement |
 
 | feature_code | 指标 | unit |
 | --- | --- | --- |
