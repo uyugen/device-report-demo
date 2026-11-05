@@ -6,6 +6,8 @@
 
 学校服务器本地千问9B的模型来源、资源配置和启动方式见 [本地部署说明](docs/local_qwen_deployment.md)。模型接入使用兼容OpenAI接口，切换模型不改变机理规则判定。
 
+新增27B本地服务使用用户授权的共享GPU 5，资源保护、量化版本及运维见 [27B部署说明](docs/local_qwen27_deployment.md)。9B服务保留，网页当前模型以/api/config及每份报告writer.model为准。
+
 见[使用与规则口径](docs/real_case_format.md)、[模板约定](docs/artifact.md)、[正式报告写作提示词](docs/report_writer_prompt.md)及[本次调整说明](docs/report_revision_20261029.md)。
 
 报告根据当前或历史全部条件满足的故障方向筛选相关特征图，连接原始坐标点，并为每张图编写“机理含义”。正式正文保留结论、台账、图文解释、措施与参考源，全部规则明细和数据检查在网页“核查资料”中查看。模型写作必须通过图表覆盖、对应引用、数字和结论边界检查。
