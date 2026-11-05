@@ -66,8 +66,11 @@ def parse_real(data):
         c = json.loads(data['case.json'].decode('utf-8-sig'))
     except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
         raise ValueError('缺少有效UTF-8 case.json') from None
-    if not isinstance(c, dict) or c.get('schema_version') != '1.1' or c.get('data_type') not in {'real_measurement','derived_test'}:
-        raise ValueError('最终值数据须使用schema_version="1.1"、data_type="real_measurement"或"derived_test"')
+    if not isinstance(c, dict) or c.get('schema_version') not in {'1.1', '1.2'} or c.get('data_type') not in {'real_measurement','derived_test'}:
+        raise ValueError('最终值数据须使用schema_version="1.2"（兼容1.1）、data_type="real_measurement"或"derived_test"')
+    if c['schema_version'] == '1.2':
+        from .input_format import normalize_compact
+        c = normalize_compact(c, data)
     is_test=c['data_type']=='derived_test'
     notice=c.get('data_notice','')
     if is_test and (not isinstance(notice,str) or not 5<=len(notice)<=300):
@@ -93,8 +96,8 @@ def parse_real(data):
         if not isinstance(d.get('name'),str) or not 1<=len(d['name'])<=120:
             raise ValueError('数据集名称缺失或过长')
         path = d.get('data_file', '')
-        p = PurePosixPath(path)
-        if not isinstance(path,str) or not path.startswith('data/') or p.suffix != '.csv' or len(p.parts) != 2 or path in expected:
+        p = PurePosixPath(path) if isinstance(path, str) else None
+        if p is None or not path.startswith('data/') or p.suffix != '.csv' or len(p.parts) != 2 or path in expected:
             raise ValueError('数据文件必须位于data目录，且不能重复')
         expected.add(path)
         if path not in data:
@@ -251,7 +254,8 @@ def check_real(s):
         limitations.append('最新图谱的绝对采集时间未提供。')
     if c.get('current_features') is not None:
         raise ValueError('此版真实输入暂使用分数据集的历史特征；current_features请留null，避免未经确认的采集绑定')
-    limitations.append('历史记录按用户指定共用最新频谱参考，不代表各历史时刻实测频谱。')
+    if any(d['kind'] == 'spectrum' for d in s['datasets']):
+        limitations.append('历史记录按用户指定共用最新频谱参考，不代表各历史时刻实测频谱。')
     install = c.get('device', {}).get('installation_date')
     if install:
         install_date = date(install).date()
@@ -261,7 +265,7 @@ def check_real(s):
         if not any(d['kind']==kind for d in s['datasets']):
             limitations.append('未提供' + ('波形' if kind=='waveform' else '频谱') + '，不补造对应图表或特征。')
     return {'warnings': list(dict.fromkeys(warnings)), 'limitations': report_limitations(list(dict.fromkeys(limitations))),
-            'checked': ['文件校验值', '设备测点关联', '单位', '坐标与时间顺序', '已提供的采样参数', '来源与图表对应'],
+            'checked': [('CSV格式与文件指纹记录' if c.get('input_schema_version') == '1.2' else '文件校验值'), '设备测点关联', '单位', '坐标与时间顺序', '已提供的采样参数', '来源与图表对应'],
             'signal_recalculation': False}
 
 

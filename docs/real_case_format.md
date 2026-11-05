@@ -8,7 +8,7 @@
 
 ## 输入
 
-沿用schema_version为1.1、data_type为real_measurement的case.json及data目录CSV，不需要补充运行状态、运行方向、负载或工况才能判定。文件校验值、单位、设备测点和坐标仍检查。客户最终特征值不复算，不执行FFT、积分、特征提取或插值。
+推荐使用精简的schema_version="1.2"，兼容旧1.1版；字段与来源约定见[精简输入说明](compact_input_v1.2.md)。case.json配合data目录CSV，data_type为real_measurement或明确标记的derived_test。不需要补充运行状态、运行方向、负载或工况才能判定。单位、设备测点和坐标仍检查；1.2版由系统记录文件指纹，不要求客户重复填写行数和校验值。客户最终特征值不复算，不执行FFT、积分、特征提取或插值。
 
 CSV表头为source_row,x,y，保留时间、原值文本和来源行号。支持七类历史指标：velocity_rms（mm/s），acceleration_rms、acceleration_peak、low_frequency_impulse（m/s²），kurtosis、skewness（1），vibration_impulse（g）；波形为s和m/s²，频谱为Hz和m/s²。
 

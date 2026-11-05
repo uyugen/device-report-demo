@@ -4,7 +4,7 @@
 
 最终引用保存在 text.citations，writer.citation_sources 分别保存 rules 和 narrative，供核对引用来源。网页、Word与PDF使用同一份最终引用。历史报告不会自动改写，重新生成报告后应用新逻辑。
 
-派生测试输入沿用一版点一最终值格式，case.json 的 data_type 使用 derived_test，并须有五至三百字的 data_notice。真实数据仍使用 real_measurement。两者使用同一套最终值解析、来源校验、机理规则及导出流程，不复算信号，不恢复原四组模拟样例。
+派生测试输入推荐使用精简1.2版最终值格式，兼容旧1.1版，case.json 的 data_type 使用 derived_test，并须有五至三百字的 data_notice。真实数据仍使用 real_measurement。两者使用同一套最终值解析、来源记录、机理规则及导出流程，不复算信号，不恢复原四组模拟样例。
 
 派生测试报告在页面、报告正文和图表中标注测试性质，不代表客户真实故障。测试包只包含 case.json 与被引用的CSV；构造程序、预期答案和核查说明放在包外。不得把原始正常波形与人工注入特征当成同一次故障采集。
 

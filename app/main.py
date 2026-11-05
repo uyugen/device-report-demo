@@ -34,7 +34,7 @@ def initial_knowledge():
 @app.get('/')
 def index():return FileResponse(ROOT/'app/static/index.html')
 @app.get('/api/config')
-def config():return {'samples':[], 'input_profile':'real_measurement_v1.1',
+def config():return {'samples':[], 'input_profile':'real_measurement_v1.2', 'compatible_input_versions':['1.1','1.2'],
     'model_enabled':os.getenv('LLM_ENABLED','false').lower()=='true' and bool(os.getenv('MODEL_API_KEY')),
     'model_name':os.getenv('MODEL_NAME','未配置'), 'model_host':urlsplit(os.getenv('MODEL_BASE_URL','')).hostname,
     'model_local':urlsplit(os.getenv('MODEL_BASE_URL','')).hostname in {'localhost','127.0.0.1','::1'},
@@ -51,7 +51,7 @@ async def upload_case(file:UploadFile=File(...)):
     raw=await file.read(MAX_ZIP+1)
     try:
         snap=parse_zip(raw)
-        if snap.get('mode')!='real_measurement':raise ValueError('请使用1.1版最终值输入格式，支持真实采集或明确标注的派生测试数据')
+        if snap.get('mode')!='real_measurement':raise ValueError('请使用1.2版最终值输入格式（兼容1.1），支持真实采集或明确标注的派生测试数据')
         snap['quality']=check_snapshot(snap);a=analyse(snap)
     except (ValueError,TypeError,KeyError,OverflowError) as e:raise HTTPException(400,str(e))
     cid=uuid.uuid4().hex
