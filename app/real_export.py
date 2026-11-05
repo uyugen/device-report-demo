@@ -97,7 +97,12 @@ def export_real(reference,s,a,decision,text,out,knowledge,writer):
             body.append(p)
             name='real_'+ch['file'];extra['word/media/'+name]=(out/ch['file']).read_bytes()
             etree.SubElement(rels,'{'+REL+'}Relationship',Id=rid,Type=R+'/image',Target='media/'+name)
-            if reader:
+            if reader and ch['kind'] == 'health_score':
+                health = a['health_score']
+                paragraph('评分说明  '+health['comparison_text'],3)
+                paragraph(health['caption'],1)
+                paragraph(health['status_caption'],1)
+            elif reader:
                 explanation=next(x for x in text['chart_explanations'] if x['dataset_id']==ch['dataset_id'])
                 explanation_p=paragraph('机理含义  '+explanation['text'],3)
                 explanation_pr=explanation_p.find('{'+W+'}pPr')
@@ -124,18 +129,27 @@ def export_real(reference,s,a,decision,text,out,knowledge,writer):
             section_heading('结论摘要')
             paragraph('当前状态  '+plan['conclusion'],3)
             paragraph(text['mechanism'])
+            if a.get('health_score',{}).get('comparison'):
+                paragraph('健康度参考  '+a['health_score']['summary_text'],3)
             section_heading('设备与数据范围')
             table([['设备名称',device['name'],'安装区域',device.get('region_name') or device.get('location') or '未提供'],
                    ['设备编码',device.get('device_code') or '未提供','监测部位',device.get('measure_point_name') or '未提供'],
                    ['采集工况',a.get('acquisition_status',{}).get('label','未统计')+'（记录占比）','','']],
                   [width*18//100,width*24//100,width*16//100,width-width*58//100],header=False,label_columns=(0,2),merge_last=True)
-            for kind,label in [('trend','振动趋势'),('waveform','时域波形'),('spectrum','幅值频谱')]:
+            section_heading('振动趋势与健康度')
+            for ch in [ch for ch in a['chart_manifest'] if ch['kind']=='trend']:chart(ch)
+            health_charts=[ch for ch in a['chart_manifest'] if ch['kind']=='health_score']
+            for ch in health_charts:chart(ch)
+            if not health_charts:paragraph('未提供健康分数，暂无法绘制健康度分值图。',1)
+            for kind,label in [('waveform','时域波形'),('spectrum','幅值频谱')]:
                 charts=[ch for ch in a['chart_manifest'] if ch['kind']==kind]
                 if not charts:continue
                 section_heading(label)
                 for ch in charts:chart(ch)
             section_heading('综合判定')
             paragraph('当前判定  '+text['assessment'],3)
+            if a.get('health_score',{}).get('assessment_text'):
+                paragraph('健康度参考  '+a['health_score']['assessment_text'],3)
             section_heading('检维修措施')
             paragraph('01 现场复核  '+text['action1'],25)
             paragraph('02 检修闭环  '+text['action2'],26)

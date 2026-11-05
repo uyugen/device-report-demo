@@ -214,6 +214,8 @@ def validate_reader_narrative(data, refs, facts):
     def check_prose(value, visible=True):
         candidate={**base,'mechanism':value}
         validate_real_narrative(candidate,refs,legacy_facts)
+        if facts.get('health_score') and re.search(r'健康度|健康分数|评分结果|评分下降',value):
+            raise ValueError('健康度说明由系统按对齐数据填入，模型不要自行添加评分或趋势结论')
         banned=re.search(r'程序|模型|上下文|JSON|CSV|source_row|原始行号|首条|末条|首末值|满足[一二三四五六七八九十\d]+项|部分符合|大概率|[a-zA-Z]:[/\\]|data/',value)
         if visible and banned:
             raise ValueError('正式报告禁止出现“'+banned.group()+'”，请改为面向读者的解释且不提高结论确定程度')

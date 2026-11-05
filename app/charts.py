@@ -90,7 +90,8 @@ def build_real_figure(snapshot, analysis, chart):
     from matplotlib.patches import Patch
 
     d = next(d for d in snapshot['datasets'] if d['dataset_id'] == chart['dataset_id'])
-    trend = d['kind'] == 'trend'
+    health = d['kind'] == 'health_score'
+    trend = d['kind'] in ('trend', 'health_score')
     x = [datetime.fromisoformat(r['x']) for r in d['rows']] if trend else [float(r['x']) for r in d['rows']]
     y = [float(r['y']) for r in d['rows']]
     height = 3.3 if analysis.get('report_plan') else 3.65
@@ -126,6 +127,9 @@ def build_real_figure(snapshot, analysis, chart):
     low, high = min(axis_values), max(axis_values)
     padding = max((high-low)*.13, abs(high)*.06, .1 if high == 0 else 1e-9)
     ax.set_ylim(0 if low >= 0 else low-padding, high+padding)
+    if health:
+        ax.set_ylim(0, 100)
+        ax.set_yticks([0, 20, 40, 60, 80, 100])
     handles = [line]
     for item in ranges:
         bounds = item['bounds']
@@ -167,13 +171,15 @@ def build_real_figure(snapshot, analysis, chart):
     ax.set_ylabel(d['name'] + ('（无量纲）' if unit in ['1', '无量纲', '-'] else f'（{unit}）'),
                   fontsize=10.5, color=ink, labelpad=8)
     fig.text(.105, .93, d['name'] + ('趋势' if trend else ''), fontsize=12.5, color=ink)
-    fig.text(.975, .935, '派生测试数据' if snapshot.get('is_test_data') else '真实采集数据',
+    fig.text(.975, .935, '模拟健康分数' if d.get('data_origin') == 'illustrative' else '派生测试数据' if snapshot.get('is_test_data') else '真实采集数据',
              fontsize=9, color=muted, ha='right')
     ax.legend(handles=handles, loc='lower left', bbox_to_anchor=(0, 1.015), borderaxespad=0,
               frameon=False, fontsize=9, ncol=2, labelcolor=muted, handlelength=2.3, columnspacing=1.6)
     note = '按实际时间连接采集点，连线不表示间隔内连续实测。' if trend else '按客户提供的原始坐标绘制。'
     if ranges:
         note += ' 阴影仅为单项机理条件，须与同一时刻其余条件联合判定。'
+    if health:
+        note = '按输入时间连接评分点，未设置健康等级阈值；停机样本不参与特征对比。'
     fig.text(.105, .025, note, fontsize=8.5, color=muted)
     return fig, ax
 

@@ -48,7 +48,7 @@ def rules(s):
             plan=build_report_plan(s['snapshot'],s['analysis'],s['decision'],s['rules'])
             s['analysis']['report_plan']=plan
             s['analysis']['available_chart_manifest']=s['analysis']['chart_manifest']
-            s['analysis']['chart_manifest']=plan['charts']
+            s['analysis']['chart_manifest']=plan['charts']+([plan['health_chart']] if plan.get('health_chart') else [])
         from .mechanism_rules import write_matches_csv
         from .real_data import report_limitations
         s['analysis']['missing']=report_limitations(s['analysis']['missing'])

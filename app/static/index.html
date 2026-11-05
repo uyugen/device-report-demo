@@ -22,11 +22,11 @@
  </div>
 </aside>
 <section class="workspace" aria-label="报告预览"><div class="toolbar"><div><strong>报告预览</strong><span id="report-state">尚未生成</span></div><div id="downloads" aria-label="报告操作"></div></div>
- <div id="empty" class="document-empty"><div class="document-heading"><span>设备状态分析报告</span><span class="stamp">真实数据</span></div><p>导入案例并完成检查后，在此查看报告。</p><div class="outline"><div>结论摘要</div><div>设备与数据范围</div><div>振动趋势</div><div>时域波形与频谱</div><div>综合判定与检维修措施</div><div>参考源与编制记录</div></div><div class="empty-footer">数值来自客户输入，程序按原始坐标绘图。机理分析附来源，支持 Word / PDF 导出。</div></div>
+ <div id="empty" class="document-empty"><div class="document-heading"><span>设备状态分析报告</span><span class="stamp">真实数据</span></div><p>导入案例并完成检查后，在此查看报告。</p><div class="outline"><div>结论摘要</div><div>设备与数据范围</div><div>振动趋势与健康度</div><div>时域波形与频谱</div><div>综合判定与检维修措施</div><div>参考源与编制记录</div></div><div class="empty-footer">数值来自客户输入，程序按原始坐标绘图。机理分析附来源，支持 Word / PDF 导出。</div></div>
  <article id="report" hidden></article>
 </section>
 </main>
 <dialog id="knowledge-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><h2 id="knowledge-title">知识文档</h2><p class="hint">完整条目用于写作参考，文中的规则不会自动执行。当前不使用 RAG。</p></div><button data-close="knowledge-dialog" aria-label="关闭知识文档">关闭</button></div><div class="import-row"><label for="knowledge-file" class="sr-only">DOCX知识文档</label><input id="knowledge-file" type="file" accept=".docx"><button id="upload" class="primary">导入 DOCX</button></div><p id="knowledge-status" role="status"></p><p id="knowledge-budget" class="hint"></p><div id="knowledge-list"></div></dialog>
 <dialog id="rules-dialog" aria-labelledby="rules-title"><div class="dialog-heading"><div><h2 id="rules-title">诊断规则</h2><p class="hint">独立维护电动机四类机理规则；逐时刻匹配，全部条件满足才判故障；有明确不满足项则该规则正常，无不满足但有未知时无法判定。所有历史共用最新频谱参考。阈值可编辑，来源文档变化需核对。</p></div><button data-close="rules-dialog">关闭</button></div><label for="rules">规则 JSON</label><textarea id="rules" spellcheck="false"></textarea><button id="save-rules" class="primary">保存规则</button><p id="rules-status" role="status"></p></dialog>
-<script src="/static/real.js?v=20261104references"></script><script src="/static/app.js?v=20261104references"></script>
+<script src="/static/real.js?v=20261105health"></script><script src="/static/app.js?v=20261105health"></script>
 </body></html>

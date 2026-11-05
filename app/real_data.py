@@ -189,6 +189,20 @@ def check_real(s):
                 raise ValueError('趋势指标重复、不支持或单位不符合约定')
             features.add(code)
             xs = [date(r['x']) for r in rows]
+        elif kind == 'health_score':
+            if any(v.get('kind') == kind for v in s['datasets'] if v is not d and v['dataset_id'] in ids):
+                raise ValueError('暂只接受一组健康分数')
+            if d['y_axis'].get('unit') != '分' or d['x_axis'].get('unit') is not None:
+                raise ValueError('健康分数单位须为分，横坐标为时间')
+            if any(not 0 <= finite(r['y'], '健康分数') <= 100 for r in rows):
+                raise ValueError('健康分数须在0到100之间')
+            from .input_format import validate_health_metadata
+            validate_health_metadata(d)
+            if d.get('data_origin', 'real_measurement') not in ('real_measurement', 'illustrative'):
+                raise ValueError('健康分数来源标记不支持')
+            if d.get('data_origin') == 'illustrative' and (not isinstance(d.get('data_notice'), str) or not 5 <= len(d['data_notice']) <= 300):
+                raise ValueError('示例健康分数须提供data_notice说明')
+            xs = [date(r['x']) for r in rows]
         elif kind in ['waveform', 'spectrum']:
             if any(v.get('kind') == kind for v in s['datasets'] if v is not d and v['dataset_id'] in ids):
                 raise ValueError('暂只接受一组波形和一组频谱')
@@ -312,6 +326,9 @@ def prepare_real(s):
                                    'kind': d['kind'], 'title': d['name'], 'unit': d['y_axis']['unit'],
                                    'chart_type':next((ch.get('chart_type','scatter' if d['kind']=='trend' else 'line') for ch in s['case_manifest'].get('charts',[]) if ch['dataset_id']==d['dataset_id']),'scatter' if d['kind']=='trend' else 'line'),
                                    'x_unit': d['x_axis'].get('unit'), 'source': d['data_file']})
+    health = next((d for d in s['datasets'] if d['kind'] == 'health_score'), None)
+    from .health_score import prepare_health_score
+    health_info = prepare_health_score(s['datasets']) if health else None
     spectrum = next((d for d in s['datasets'] if d['kind']=='spectrum'), None)
     if spectrum and s['device']['rpm']:
         rotation = Decimal(str(s['device']['rpm'])) / Decimal(60)
@@ -335,6 +352,7 @@ def prepare_real(s):
             'evidence_items':evidence, 'chart_manifest':chart_manifest,
             'acquisition_status': acquisition_status(s['datasets']),
             'signal_recalculation':False, 'history_linked_to_latest':False,
+            **({'health_score': health_info} if health_info else {}),
             'spectrum_provided':spectrum is not None,
             'summary':'已按全部历史记录逐次匹配设备机理规则，具体结果见综合判定。'}
 
@@ -362,6 +380,8 @@ def real_facts(s, a, decision):
                             'note':'波形及频谱坐标由程序绘图，未向模型发送图片或全量坐标；不能声称目视观察到周期波形或冲击。'},
             'operating_condition':s['case_manifest'].get('operating_condition'),
             'acquisition_status':a.get('acquisition_status'),
+            **({'health_score': {k:v for k,v in a['health_score'].items() if k != 'comparison'},
+                'health_comparison': {k:v for k,v in a['health_score']['comparison'].items() if k != 'records'} if a['health_score']['comparison'] else None} if a.get('health_score') else {}),
             'latest_acquisition':s['case_manifest'].get('latest_acquisition'),
             'historical_features':[{k:v for k,v in x.items() if k not in ['first','last']} for x in a['series']],
             'order_coordinate_lookups':a['order_coordinates'],

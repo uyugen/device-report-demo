@@ -42,6 +42,7 @@ def build_report_plan(snapshot, analysis, decision, configured_rules):
     selected = []
     datasets = {d['dataset_id']: d for d in snapshot['datasets']}
     available = deepcopy(analysis['chart_manifest'])
+    health_chart = next((ch for ch in available if ch['kind'] == 'health_score'), None)
     for chart in available:
         dataset = datasets[chart['dataset_id']]
         code = dataset.get('feature_code')
@@ -66,9 +67,9 @@ def build_report_plan(snapshot, analysis, decision, configured_rules):
                                                if r.get('records') and r.get('knowledge_id'))),
             'overall_status':overall,'historical_status_counts':decision.get('historical_status_counts',{}),
             'conclusion': conclusion, 'directions': directions,
-            'charts': selected, 'available_chart_count': len(available),
+            'charts': selected, **({'health_chart': health_chart} if health_chart else {}), 'available_chart_count': len(available),
             'selection_policy': '仅为最近或历史某一时刻全部条件满足的故障方向配图；部分满足不作为故障方向，不单独配图。'
-                                '无故障命中时生成正常或无法判定的文字报告，缺少输入不补图。',
+                                '健康度分值图独立于故障筛选，正常与故障均在03节末展示；缺少健康分数时说明未提供，不补造曲线。',
             'line_policy': '按原始时间或坐标连接相邻实测点；不插值，不将采集间隔解释为连续实测。'}
 
 

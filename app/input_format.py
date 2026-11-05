@@ -54,15 +54,25 @@ def normalize_compact(c, data):
     }
     for d in datasets:
         fields(d, ['dataset_id', 'kind', 'feature_code', 'data_file', 'unit', 'source',
-                   'measured_time', 'sampling'], ['dataset_id', 'kind', 'data_file', 'unit'], 'dataset')
+                   'measured_time', 'sampling', 'health_model', 'data_origin', 'data_notice'], ['dataset_id', 'kind', 'data_file', 'unit'], 'dataset')
         kind, code, path = d['kind'], d.get('feature_code'), d['data_file']
         if kind == 'trend':
             if code not in METRIC_NAMES:
                 raise ValueError('趋势须提供受支持的feature_code')
             if d.get('measured_time') is not None or d.get('sampling') is not None:
                 raise ValueError('趋势采集时间来自CSV，不填写measured_time或sampling')
+        elif kind == 'health_score':
+            if code is not None or d.get('measured_time') is not None or d.get('sampling') is not None:
+                raise ValueError('健康分数使用CSV逐行时间，不填写feature_code、measured_time或sampling')
+            validate_health_metadata(d)
+            if d.get('data_origin', 'real_measurement') not in ('real_measurement', 'illustrative'):
+                raise ValueError('健康分数data_origin须为real_measurement或illustrative')
+            if d.get('data_origin') == 'illustrative' and (not isinstance(d.get('data_notice'), str) or not 5 <= len(d['data_notice']) <= 300):
+                raise ValueError('示例健康分数须提供data_notice说明')
         elif kind not in ('waveform', 'spectrum') or code is not None:
             raise ValueError('数据类型仅支持trend、waveform、spectrum；图谱不填写feature_code')
+        if kind != 'health_score' and any(k in d for k in ['health_model', 'data_origin', 'data_notice']):
+            raise ValueError('health_model、data_origin、data_notice仅适用于健康分数')
         if d.get('sampling') is not None:
             fields(d['sampling'], ['sampling_rate_hz', 'sample_count', 'duration_seconds'], [], 'sampling')
             if kind != 'waveform':
@@ -84,21 +94,31 @@ def normalize_compact(c, data):
         sid = 'SRC-' + d['dataset_id']
         item = {
             'dataset_id': d['dataset_id'], 'kind': kind, 'feature_code': code,
-            'name': METRIC_NAMES[code] if kind == 'trend' else '时域波形' if kind == 'waveform' else '振动频谱',
+            'name': METRIC_NAMES[code] if kind == 'trend' else '健康度分值' if kind == 'health_score' else '时域波形' if kind == 'waveform' else '振动频谱',
             'device_id': dev['device_id'], 'point_ref': point['point_id'],
             'source_id': sid, 'data_file': path, 'data_sha256': digest, 'row_count': count,
-            'x_axis': {'unit': None if kind == 'trend' else 's' if kind == 'waveform' else 'Hz'},
+            'x_axis': {'unit': None if kind in ('trend', 'health_score') else 's' if kind == 'waveform' else 'Hz'},
             'y_axis': {'unit': d['unit']},
-            'acquisition': {'measured_time': d.get('measured_time', latest.get('measured_time')) if kind != 'trend' else None},
+            'acquisition': {'measured_time': d.get('measured_time', latest.get('measured_time')) if kind in ('waveform','spectrum') else None},
             'sampling': d.get('sampling'),
+            **({k: d[k] for k in ['health_model', 'data_origin', 'data_notice'] if k in d} if kind == 'health_score' else {}),
         }
         result['datasets'].append(item)
         result['sources'].append({'source_id': sid, 'path': path, 'sha256': digest,
                                   'original_file_name': source.get('file_name', path),
                                   **({'record_id': source['record_id']} if 'record_id' in source else {})})
-        if kind != 'trend':
+        if kind in ('waveform', 'spectrum'):
             result['latest_acquisition']['dataset_ids'].append(d['dataset_id'])
     return result
+
+
+def validate_health_metadata(d):
+    fields(d.get('health_model'), ['model_name', 'model_version', 'algorithm_name',
+                                   'calculation_status', 'configuration_name'],
+           ['model_name', 'algorithm_name', 'calculation_status', 'configuration_name'], 'health_model')
+    version = d['health_model'].get('model_version')
+    if version is not None and (not isinstance(version, str) or not version.strip() or len(version) > 300):
+        raise ValueError('model_version须为非空文本')
 
 
 def compact_legacy(c):
@@ -130,6 +150,8 @@ def compact_legacy(c):
     for d in c['datasets']:
         item = {k: d[k] for k in ['dataset_id', 'kind', 'data_file']}
         item['unit'] = d['y_axis']['unit']
+        if d['kind'] == 'health_score':
+            item.update({k:d[k] for k in ['health_model','data_origin','data_notice'] if k in d})
         if d['kind'] == 'trend':
             item['feature_code'] = d['feature_code']
         measured = d.get('acquisition', {}).get('measured_time')

@@ -22,13 +22,15 @@
 | 字段 | 要求 |
 | --- | --- |
 | dataset_id | 必填且唯一，供规则证据与图表关联；原案例DS-01～DS-09沿用 |
-| kind | trend（历史特征）、waveform（波形）或spectrum（频谱） |
+| kind | trend（历史特征）、waveform（波形）、spectrum（频谱）或health_score（健康度分值） |
 | feature_code | 趋势必填，从下列七类指标选择；波形、频谱省略 |
 | data_file | 必填，例如data/kurtosis.csv；只能引用包内data目录的CSV |
 | unit | 必填，纵坐标单位；见下表。横坐标类型与单位由kind确定 |
 | source.file_name、source.record_id | 选填，原导出文件名或接口记录编号，用于追溯；未提供时以包内CSV路径为来源 |
 | measured_time | 图谱选填，覆盖包级图谱时间；历史特征逐行时间在CSV中填写 |
 | sampling | 仅波形选填；sampling_rate_hz、sample_count、duration_seconds已知才填。系统检查参数和坐标一致，不反推缺失值 |
+| health_model | 仅健康度分值必填，含model_name、algorithm_name、calculation_status、configuration_name；model_version选填 |
+| data_origin、data_notice | 仅健康度分值使用；模拟评分为illustrative且须有说明，真实评分为real_measurement |
 
 | feature_code | 指标 | unit |
 | --- | --- | --- |
@@ -41,6 +43,8 @@
 | vibration_impulse | 振动冲击值 | g |
 
 波形纵坐标为m/s²，横坐标为秒；频谱纵坐标为m/s²，横坐标为Hz。暂不隐式换算单位；缺少某指标就省略整组数据，不伪填零值。
+
+健康度CSV仍为source_row,x,y，x为评分时间、y为0～100分，单位固定“分”。健康度不作为第八类振动指标或机理条件。正常与故障均在第03节末展示，详细口径见[健康度展示说明](health_score_display.md)。
 
 CSV仍使用UTF-8编码，表头为source_row,x,y：source_row是原导出文件行号；趋势x为ISO时间，波形x为相对秒数，频谱x为Hz；y为客户接口或导出的最终值。时间、坐标与数值文本原样保留。横坐标严格递增，同一时刻的不同指标按时间对应；不跨时刻拼接，不插值。
 

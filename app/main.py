@@ -65,6 +65,7 @@ async def upload_case(file:UploadFile=File(...)):
              'features':a['features'],'feature_source':a['feature_source'],
              'series':a.get('series',[]),'chart_manifest':a.get('chart_manifest',[]),
              'acquisition_status':a.get('acquisition_status'),
+             'health_score':a.get('health_score'),
              'order_coordinates':a.get('order_coordinates',[]),'has_spectrum':a.get('spectrum_provided',False)}
     (folder/f'{cid}.json').write_text(json.dumps(preview,ensure_ascii=False))
     return preview

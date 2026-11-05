@@ -84,13 +84,17 @@ function renderReaderReport(data) {
   <tr><th scope="row">采集工况</th><td colspan="3">${esc(a.acquisition_status?.label || '未统计')}（记录占比）</td></tr></tbody></table></div>`;
   const start=data.decision.trend_start?.slice(0,10),end=data.decision.trend_end?.slice(0,10);
   let html=`<header class="report-header"><h1>${esc(data.device.name)}状态分析报告</h1><div class="report-location">${esc(data.device.region_name || data.device.location)}${start&&end?' | 数据时间区间 '+esc(start)+' 至 '+esc(end):''}</div>${data.is_test_data?`<p class="caption">${esc(data.data_notice)}</p>`:''}</header>`;
-  html+=section('结论摘要',`<p><strong>当前状态：</strong>${esc(plan.conclusion)}</p><p>${esc(data.text.mechanism)}</p>`);
+  html+=section('结论摘要',`<p><strong>当前状态：</strong>${esc(plan.conclusion)}</p><p>${esc(data.text.mechanism)}</p>${a.health_score?.comparison?`<p><strong>健康度参考：</strong>${esc(a.health_score.summary_text)}</p>`:''}`);
   html+=section('设备与数据范围',scope);
-  for(const [kind,title] of [['trend','振动趋势'],['waveform','时域波形'],['spectrum','幅值频谱']]) {
+  const h=a.health_score;
+  const healthCharts=a.chart_manifest.filter(ch=>ch.kind==='health_score');
+  const healthHtml=healthCharts.length?healthCharts.map(ch=>`<figure class="source-figure"><img src="${base+encodeURIComponent(ch.file)}" alt="健康度分值时间曲线" loading="lazy"><p><strong>评分说明：</strong>${esc(h.comparison_text)}</p><p class="caption">${esc(h.caption)}</p><p class="caption">${esc(h.status_caption)}</p></figure>`).join(''):'<p class="caption">未提供健康分数，暂无法绘制健康度分值图。</p>';
+  html+=section('振动趋势与健康度',a.chart_manifest.filter(ch=>ch.kind==='trend').map(chart).join('')+healthHtml);
+  for(const [kind,title] of [['waveform','时域波形'],['spectrum','幅值频谱']]) {
     const charts=a.chart_manifest.filter(ch=>ch.kind===kind);
     if(charts.length)html+=section(title,charts.map(chart).join(''));
   }
-  html+=section('综合判定',`<p><strong>当前判定：</strong>${esc(data.text.assessment)}</p>`);
+  html+=section('综合判定',`<p><strong>当前判定：</strong>${esc(data.text.assessment)}</p>${h?.assessment_text?`<p><strong>健康度参考：</strong>${esc(h.assessment_text)}</p>`:''}`);
   html+=section('检维修措施',`<p><strong>现场复核：</strong>${esc(data.text.action1)}</p><p><strong>检修闭环：</strong>${esc(data.text.action2)}</p>`);
   const references=new Map();
   for(const k of data.knowledge.filter(k=>data.text.citations.includes(k.id))){
