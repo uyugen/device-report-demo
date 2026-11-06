@@ -1,5 +1,7 @@
 # 设备状态报告生成工作台
 
+首次安装请从[独立部署与验收](docs/deployment.md)开始。仓库包含Word模板、[部署验收知识文档与三份1.2版案例](examples/README.md)、配置示例及检查脚本；接入本地Qwen见[从空环境安装模型](docs/local_model_fresh_install.md)，验证范围见[部署资料验收记录](docs/deployment_validation.md)。下文的学校服务器记录用于原环境运维，不是新机器的安装前提。
+
 使用客户最终值，按全部历史记录逐时刻匹配电动机机理规则；历史共用用户指定的最新频谱参考。同一规则全部条件满足才判为对应故障，有明确不满足项则该规则正常，无不满足但有未知项时无法判定。不同故障规则独立判断，正常规则不能抵消已命中故障。大模型撰写解释和建议，支持网页、Word、PDF与逐次明细CSV。
 
 当前判定与正常报告说明见 [全条件匹配说明](docs/strict_matching_20261103.md)，实际写作提示词见 [report_writer_prompt.md](docs/report_writer_prompt.md)。

@@ -1,0 +1,40 @@
+{
+  "purpose": "独立部署验收资料，不使用客户原始数据；不代表真实设备故障。",
+  "schema_version": "1.2",
+  "knowledge": {
+    "file": "deployment_knowledge.docx",
+    "count": 4,
+    "sha256": "f978931944d7c04d36d8591ee956254fd880b2847c4853157d53ccd39e2f8b80"
+  },
+  "cases": [
+    {
+      "file": "normal.zip",
+      "sha256": "980fe3bb36639cf472b8113e5d5f24eedb8036f8cec3908030c0e0f0dc738259",
+      "expected_status": "正常",
+      "expected_faults": [],
+      "history_normal": 24,
+      "history_fault": 0,
+      "health_chart_required": true
+    },
+    {
+      "file": "bearing_fault.zip",
+      "sha256": "8b90dc65c88f340712a8d20a363c246b385e528199877ee1b31196467a97a3ab",
+      "expected_status": "故障",
+      "expected_faults": [
+        "电机滚动轴承故障"
+      ],
+      "history_normal": 16,
+      "history_fault": 8,
+      "health_chart_required": true
+    },
+    {
+      "file": "historical_fault.zip",
+      "sha256": "9e46e354730aac3c3146bd461d98608cfba9b0dd617feda84998aef275d6622b",
+      "expected_status": "正常",
+      "expected_faults": [],
+      "history_normal": 16,
+      "history_fault": 8,
+      "health_chart_required": true
+    }
+  ]
+}
