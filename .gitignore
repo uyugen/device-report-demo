@@ -1,6 +1,7 @@
 .venv/
 .env
-inputs/
+/inputs/*
+!/inputs/reference.docx
 workspace/
 __pycache__/
 .pytest_cache/
