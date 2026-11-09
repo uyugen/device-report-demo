@@ -108,7 +108,9 @@ async function poll() {
     }
     busy = false; syncButton();
     if (data.status === 'failed') throw Error(data.error);
-    $('status').textContent = '报告已生成，请复核后使用。';
+    $('status').textContent = data.writer?.mode === 'llm'
+      ? `报告已生成，正文使用 ${data.writer.model || '大模型'} 撰写，请复核后使用。`
+      : `报告已生成，正文使用固定说明。${data.writer?.message || '未采用大模型正文。'}`;
     render(data);
     if (!caseId && !$('case-file').files.length) await restoreCasePreview(data);
   } catch (error) { $('status').textContent = error.message; busy = false; syncButton(); }
